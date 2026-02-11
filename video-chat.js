@@ -224,13 +224,32 @@ function initPeer(){
         { urls: 'turn:turn.anyfirewall.com:443?transport=tcp', username: 'webrtc', credential: 'webrtc' }
     ];
     if(turn && turn.host){
-        const turnEntry = { urls: `turn:${turn.host}` };
-        if(turn.username) turnEntry.username = turn.username;
-        if(turn.credential) turnEntry.credential = turn.credential;
-        // prefer user-provided TURN by adding to the beginning of the list
-        iceServers.unshift(turnEntry);
+        if(turn.username && turn.credential){
+            const turnEntry = { urls: `turn:${turn.host}`, username: turn.username, credential: turn.credential };
+            // prefer user-provided TURN by adding to the beginning of the list
+            iceServers.unshift(turnEntry);
+        } else {
+            console.warn('TURN server from URL missing username/credential — skipping adding it to iceServers');
+        }
     }
-    pc = new RTCPeerConnection({ iceServers });
+
+    // Filter out any TURN entries that don't have username+credential because
+    // some browsers throw InvalidAccessError when constructing RTCPeerConnection
+    // if a `turn:` URL lacks credentials.
+    const finalIceServers = iceServers.filter(s => {
+        const urls = s.urls || s.url || '';
+        const urlStr = Array.isArray(urls) ? urls.join(' ') : String(urls);
+        if(urlStr.startsWith('turn:') || urlStr.startsWith('turns:')){
+            return s.username && s.credential;
+        }
+        return true;
+    });
+
+    if(finalIceServers.length !== iceServers.length){
+        console.warn('Some TURN entries were removed from iceServers because they lacked credentials.');
+    }
+
+    pc = new RTCPeerConnection({ iceServers: finalIceServers });
     pc.ontrack = e => {
         const remote = e.streams[0];
         try{ remoteAudio.srcObject = remote; }
