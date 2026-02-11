@@ -30,7 +30,11 @@ async function startCamera(){
 }
 
 function initPeer(){
-    pc = new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+    pc = new RTCPeerConnection({
+        iceServers:[
+            { urls: "turn:free.expressturn.com:3478", username: "000000002086180959", credential: "BTe2gOGg4BezIV/ZPcW11467m+U=" }
+        ]
+    });
     pc.ontrack = e => remoteVideo.srcObject = e.streams[0];
     pc.onicecandidate = e => { if(e.candidate) sendSignal({type:'candidate', candidate:e.candidate}); };
     localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
