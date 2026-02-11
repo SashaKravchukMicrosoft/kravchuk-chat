@@ -8,6 +8,11 @@ let isSwapped = false;
 const remoteVideo = document.getElementById('remoteVideo');
 const statusText = document.getElementById('status');
 const switchCamBtn = document.getElementById('switchCamBtn');
+// Hidden audio element to always play remote audio (prevents losing sound when swapping video elements)
+const remoteAudio = document.createElement('audio');
+remoteAudio.autoplay = true;
+remoteAudio.style.display = 'none';
+document.body.appendChild(remoteAudio);
 
 function log(msg){ statusText.innerText = msg; }
 
@@ -44,8 +49,9 @@ async function startCamera(){
         localMini.srcObject = localStream;
         localMini.style.transform = 'scaleX(-1)';
     } else {
-        // if swapped, main remoteVideo shows local preview
+        // if swapped, main remoteVideo shows local preview — keep video muted to avoid echo
         remoteVideo.srcObject = localStream;
+        remoteVideo.muted = true;
     }
 }
 
@@ -61,11 +67,17 @@ function initPeer(){
     pc = new RTCPeerConnection({ iceServers });
     pc.ontrack = e => {
         const remote = e.streams[0];
+        try{ remoteAudio.srcObject = remote; }
+        catch(e){ console.error('setting remote audio failed', e); }
+
+        // Always keep remote audio playing via remoteAudio. Mute video elements to avoid double-audio/echo.
         if(localMini && isSwapped){
             localMini.srcObject = remote;
             localMini.style.transform = 'scaleX(1)';
+            remoteVideo.muted = true; // ensure remoteVideo (showing local or other) doesn't duplicate audio
         } else {
             remoteVideo.srcObject = remote;
+            remoteVideo.muted = true;
         }
     };
     pc.onicecandidate = e => { if(e.candidate) sendSignal({type:'candidate', candidate:e.candidate}); };
