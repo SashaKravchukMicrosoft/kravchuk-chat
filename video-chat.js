@@ -66,17 +66,29 @@ async function startChat(){
         const data = JSON.parse(e.data);
         if(data.room!==ROOM) return;
 
-        if(data.offer && !pc.remoteDescription){
-            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            sendSignal({answer:answer});
-            log("Ответ отправлен, соединение устанавливается...");
-        } else if(data.answer && !pc.remoteDescription){
-            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            log("Соединение установлено!");
+        console.log('Signal received:', data);
+
+        if(data.offer){
+            if(!pc.remoteDescription){
+                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                sendSignal({answer:answer});
+                log("Ответ отправлен, соединение устанавливается...");
+            } else {
+                console.warn('Received offer but remoteDescription already set; ignoring.');
+            }
+        } else if(data.answer){
+            // Accept answers unconditionally — needed when both peers exchanged offers (glare)
+            try{
+                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                log("Соединение установлено!");
+            }catch(err){
+                console.error('Failed to set remote answer:', err);
+            }
         } else if(data.candidate){
-            try{ await pc.addIceCandidate(data.candidate); }catch(e){}
+            try{ await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }
+            catch(e){ console.error('addIceCandidate failed', e); }
         }
     };
 
