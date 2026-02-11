@@ -82,6 +82,48 @@ function initPeer(){
     };
 }
 
+function createLocalMini(){
+    // create small self-preview in corner
+    if(localMini) return;
+    localMini = document.createElement('video');
+    localMini.id = 'localMini';
+    localMini.autoplay = true;
+    localMini.muted = true;
+    localMini.playsInline = true;
+    Object.assign(localMini.style, {
+        position: 'fixed',
+        width: '180px',
+        height: '135px',
+        bottom: '12px',
+        right: '12px',
+        zIndex: 9999,
+        border: '2px solid #222',
+        borderRadius: '8px',
+        backgroundColor: '#000',
+        cursor: 'pointer',
+        objectFit: 'cover'
+    });
+    localMini.addEventListener('click', ()=>{
+        swapVideos();
+    });
+    document.body.appendChild(localMini);
+    // hide switchCamBtn on desktop
+    try{ if(!isMobile && switchCamBtn) switchCamBtn.style.display = 'none'; }
+    catch(e){}
+}
+
+function swapVideos(){
+    if(!localMini) return;
+    const a = remoteVideo.srcObject;
+    const b = localMini.srcObject;
+    remoteVideo.srcObject = b;
+    localMini.srcObject = a;
+    // keep local preview mirrored when it shows localStream
+    if(localMini.srcObject === localStream) localMini.style.transform = 'scaleX(-1)';
+    else localMini.style.transform = 'scaleX(1)';
+    isSwapped = !isSwapped;
+}
+
 function sendSignal(msg){
     msg.room = ROOM;
     msg.clientId = CLIENT_ID;
