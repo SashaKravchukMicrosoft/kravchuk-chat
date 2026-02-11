@@ -66,7 +66,7 @@ async function startCamera(){
 
 function initPeer(){
     const turn = getTurnFromURL();
-    const iceServers = [ { urls: "stun:stun.l.google.com:19302" } ];
+    const iceServers = [];
     if(turn && turn.host){
         const turnEntry = { urls: `turn:${turn.host}` };
         if(turn.username) turnEntry.username = turn.username;
