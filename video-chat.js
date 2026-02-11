@@ -18,6 +18,14 @@ function getRoomFromURL(){
     return room;
 }
 
+function getTurnFromURL(){
+    const params = new URLSearchParams(window.location.search);
+    const host = params.get('turnHost') || 'free.expressturn.com:3478';
+    const username = params.get('turnUser');
+    const credential = params.get('turnPass');
+    return { host, username, credential };
+}
+
 async function startCamera(){
     if(localStream){
         localStream.getTracks().forEach(t=>t.stop());
@@ -30,11 +38,15 @@ async function startCamera(){
 }
 
 function initPeer(){
-    pc = new RTCPeerConnection({
-        iceServers:[
-            { urls: "turn:free.expressturn.com:3478", username: "000000002086180959", credential: "BTe2gOGg4BezIV/ZPcW11467m+U=" }
-        ]
-    });
+    const turn = getTurnFromURL();
+    const iceServers = [ { urls: "stun:stun.l.google.com:19302" } ];
+    if(turn && turn.host){
+        const turnEntry = { urls: `turn:${turn.host}` };
+        if(turn.username) turnEntry.username = turn.username;
+        if(turn.credential) turnEntry.credential = turn.credential;
+        iceServers.push(turnEntry);
+    }
+    pc = new RTCPeerConnection({ iceServers });
     pc.ontrack = e => remoteVideo.srcObject = e.streams[0];
     pc.onicecandidate = e => { if(e.candidate) sendSignal({type:'candidate', candidate:e.candidate}); };
     localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
