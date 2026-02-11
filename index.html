@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <title>Family P2P Video Chat</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Disable caching as much as possible from the client side -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <style>
 body{margin:0;font-family:sans-serif;background:#111;color:#fff;text-align:center;}
 video{width:100vw;height:100vh;object-fit:cover;background:#000;}
@@ -31,6 +35,32 @@ button{padding:10px 15px;font-size:16px;border-radius:6px;background:transparent
 </div>
 <p id="status">Инициализация...</p>
 
+<script>
+// Try to stop service workers (if any) so they don't cache responses
+if('serviceWorker' in navigator){
+	navigator.serviceWorker.getRegistrations().then(regs=>regs.forEach(r=>r.unregister())).catch(()=>{});
+}
+
+// If the page is restored from bfcache, reload to get a fresh copy
+window.addEventListener('pageshow', (e)=>{
+	if(e.persisted) {
+		const u = new URL(window.location.href);
+		u.searchParams.set('_', Date.now());
+		window.location.replace(u.toString());
+	}
+});
+
+// Intercept F5 / Ctrl+R / Cmd+R and reload with cache-busting param
+window.addEventListener('keydown', (e)=>{
+	const isReload = e.key === 'F5' || ((e.ctrlKey||e.metaKey) && e.key.toLowerCase() === 'r');
+	if(isReload){
+		e.preventDefault();
+		const u = new URL(window.location.href);
+		u.searchParams.set('_', Date.now());
+		window.location.href = u.toString();
+	}
+});
+</script>
 <script src="video-chat.js"></script>
 </body>
 </html>
