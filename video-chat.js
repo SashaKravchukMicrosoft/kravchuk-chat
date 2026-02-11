@@ -3,6 +3,7 @@ const CLIENT_ID = Math.random().toString(36).substring(2,9);
 let hasSentOffer = false;
 let joinInterval = null;
 let EXPECTED_WS_CLOSE = false; // when true, suppress normal ws close log
+let WS_WAS_OPEN = false; // true if ws.onopen has fired for current socket
 const isMobile = (('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.innerWidth < 768);
 let localMini = null;
 let isSwapped = false;
@@ -644,7 +645,9 @@ async function startChat(){
     const wsUrl = `wss://demo.piesocket.com/v3/${composite}?api_key=${composite}`;
     ws = new WebSocket(wsUrl);
 
+    // mark socket as opened when onopen fires
     ws.onopen = async ()=>{
+        WS_WAS_OPEN = true;
         log("Сигналинг подключён, отправляю JOIN...");
         startJoinPing();
     };
@@ -687,7 +690,18 @@ async function startChat(){
     };
 
     ws.onerror = e => { console.error('ws error', e); log("Ошибка сигналинга"); };
-    ws.onclose = () => { stopJoinPing(); if(EXPECTED_WS_CLOSE){ EXPECTED_WS_CLOSE = false; return; } log("Сигналинг закрыт"); };
+    ws.onclose = () => { 
+        stopJoinPing(); 
+        if(EXPECTED_WS_CLOSE){ EXPECTED_WS_CLOSE = false; WS_WAS_OPEN = false; return; }
+        if(!WS_WAS_OPEN){
+            // socket never opened successfully
+            WS_WAS_OPEN = false;
+            log("Ошибка сигналинга");
+        } else {
+            WS_WAS_OPEN = false;
+            log("Сигналинг закрыт");
+        }
+    };
 }
 
 // Переключение камеры
