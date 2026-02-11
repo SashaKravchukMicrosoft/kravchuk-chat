@@ -642,7 +642,7 @@ async function startChat(){
 
     // Use composite room (cluster:subroom) as channel key so each subroom is isolated
     const composite = encodeURIComponent(getCompositeRoom());
-    const wsUrl = `wss://demo.piesocket.com/v3/${composite}?api_key=${composite}`;
+    const wsUrl = `wss://s15819.blr1.piesocket.com/v3/${composite}?api_key=${composite}`;
     ws = new WebSocket(wsUrl);
 
     // mark socket as opened when onopen fires
