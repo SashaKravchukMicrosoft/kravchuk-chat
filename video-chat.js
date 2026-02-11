@@ -120,8 +120,60 @@ function createLocalMini(){
         cursor: 'pointer',
         objectFit: 'cover'
     });
-    localMini.addEventListener('click', ()=>{
-        swapVideos();
+    // Drag & click handling: distinguish drag from click
+    let dragState = { dragging: false, startX:0, startY:0, origLeft:0, origTop:0 };
+    localMini.addEventListener('pointerdown', (ev)=>{
+        localMini.setPointerCapture(ev.pointerId);
+        dragState.dragging = true;
+        dragState.startX = ev.clientX;
+        dragState.startY = ev.clientY;
+        const rect = localMini.getBoundingClientRect();
+        dragState.origLeft = rect.left;
+        dragState.origTop = rect.top;
+        // switch to absolute positioning while dragging
+        localMini.style.transition = 'none';
+        localMini.style.right = 'auto';
+        localMini.style.bottom = 'auto';
+        localMini.style.left = rect.left + 'px';
+        localMini.style.top = rect.top + 'px';
+
+        function onPointerMove(e){
+            if(!dragState.dragging) return;
+            const dx = e.clientX - dragState.startX;
+            const dy = e.clientY - dragState.startY;
+            localMini.style.left = (dragState.origLeft + dx) + 'px';
+            localMini.style.top = (dragState.origTop + dy) + 'px';
+        }
+
+        function onPointerUp(e){
+            localMini.releasePointerCapture(ev.pointerId);
+            dragState.dragging = false;
+            document.removeEventListener('pointermove', onPointerMove);
+            document.removeEventListener('pointerup', onPointerUp);
+            // if movement was small, treat as click -> swap
+            const moved = Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY);
+            if(moved < 8){
+                swapVideos();
+            } else {
+                // snap to nearest corner
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const rect = localMini.getBoundingClientRect();
+                const cx = rect.left + rect.width/2;
+                const cy = rect.top + rect.height/2;
+                const left = cx < vw/2;
+                const top = cy < vh/2;
+                localMini.style.transition = 'left 0.15s, top 0.15s, right 0.15s, bottom 0.15s';
+                // snap with 12px offset
+                if(left && top){ localMini.style.left='12px'; localMini.style.top='12px'; localMini.style.right='auto'; localMini.style.bottom='auto'; }
+                else if(!left && top){ localMini.style.right='12px'; localMini.style.top='12px'; localMini.style.left='auto'; localMini.style.bottom='auto'; }
+                else if(left && !top){ localMini.style.left='12px'; localMini.style.bottom='12px'; localMini.style.top='auto'; localMini.style.right='auto'; }
+                else { localMini.style.right='12px'; localMini.style.bottom='12px'; localMini.style.top='auto'; localMini.style.left='auto'; }
+            }
+        }
+
+        document.addEventListener('pointermove', onPointerMove);
+        document.addEventListener('pointerup', onPointerUp);
     });
     document.body.appendChild(localMini);
     // hide switchCamBtn on desktop
