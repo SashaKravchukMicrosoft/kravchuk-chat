@@ -1,122 +1,112 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<title>Simple P2P Family Video</title>
+<meta charset="UTF-8">
+<title>Family P2P Video Chat</title>
 <style>
 body { font-family: sans-serif; text-align: center; background:#111; color:#fff; }
 video { width: 45%; margin:10px; background:#000; border-radius:12px; }
+textarea { width:90%; height:80px; margin:5px; background:#222; color:#fff; border-radius:6px; padding:5px; }
 button { padding:10px 20px; margin:10px; font-size:16px; border-radius:8px; }
-textarea { width:90%; height:80px; }
+#status { margin:10px; }
 </style>
 </head>
 <body>
 
-<h2>Family P2P Video</h2>
+<h2>Family P2P Video Chat</h2>
 
 <video id="localVideo" autoplay muted playsinline></video>
 <video id="remoteVideo" autoplay playsinline></video>
 
-<br>
-
+<div>
 <button id="startBtn">Start Camera</button>
-<button id="createBtn">Create Link</button>
-<button id="answerBtn">Generate Answer Link</button>
+<button id="createOfferBtn">Create Offer</button>
+<button id="setAnswerBtn">Set Answer</button>
+</div>
+
+<textarea id="offerArea" placeholder="Offer / Paste here"></textarea>
+<textarea id="answerArea" placeholder="Answer / Paste here"></textarea>
 
 <p id="status"></p>
 
 <script>
-const localVideo = document.getElementById("localVideo");
-const remoteVideo = document.getElementById("remoteVideo");
-const statusText = document.getElementById("status");
-
-let pc;
 let localStream;
+let pc;
 
-function log(msg){
-  statusText.innerText = msg;
-}
+const localVideo = document.getElementById('localVideo');
+const remoteVideo = document.getElementById('remoteVideo');
+const offerArea = document.getElementById('offerArea');
+const answerArea = document.getElementById('answerArea');
+const statusText = document.getElementById('status');
 
-async function initPeer(){
-  pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-  });
-
-  pc.ontrack = e => {
-    remoteVideo.srcObject = e.streams[0];
-  };
-
-  pc.oniceconnectionstatechange = () => {
-    log("ICE state: " + pc.iceConnectionState);
-  };
-
-  localStream.getTracks().forEach(track =>
-    pc.addTrack(track, localStream)
-  );
-}
+function log(msg){ statusText.innerText = msg; }
 
 async function startCamera(){
-  localStream = await navigator.mediaDevices.getUserMedia({
-    video: true,
-    audio: true
-  });
-  localVideo.srcObject = localStream;
-  log("Camera started");
+    localStream = await navigator.mediaDevices.getUserMedia({video:true, audio:true});
+    localVideo.srcObject = localStream;
+    log("Camera started");
 }
 
-async function waitForIceComplete(){
-  return new Promise(resolve=>{
-    if(pc.iceGatheringState === "complete"){
-      resolve();
-    } else {
-      pc.onicegatheringstatechange = ()=>{
-        if(pc.iceGatheringState === "complete"){
-          resolve();
-        }
-      };
+function initPeer(){
+    pc = new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+
+    pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; };
+    pc.oniceconnectionstatechange = () => { log("ICE state: " + pc.iceConnectionState); };
+
+    if(localStream){
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
-  });
 }
 
-document.getElementById("startBtn").onclick = startCamera;
+async function createOffer(){
+    initPeer();
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
 
-document.getElementById("createBtn").onclick = async ()=>{
-  await initPeer();
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  await waitForIceComplete();
+    await new Promise(resolve => {
+        pc.onicecandidate = e => {
+            if(!e.candidate) resolve();
+        };
+    });
 
-  const encoded = btoa(JSON.stringify(pc.localDescription));
-  const link = location.origin + location.pathname + "?offer=" + encoded;
+    offerArea.value = JSON.stringify(pc.localDescription);
+    log("Offer created. Send it to the other person.");
+}
 
-  prompt("Send this link:", link);
-  log("Offer link created");
-};
+async function setAnswer(){
+    if(!pc) initPeer();
+    const answer = JSON.parse(answerArea.value);
+    await pc.setRemoteDescription(answer);
+    log("Answer set! Connection should start shortly.");
+}
 
-document.getElementById("answerBtn").onclick = async ()=>{
-  const params = new URLSearchParams(window.location.search);
-
-  if(params.get("offer")){
-    await initPeer();
-    const offer = JSON.parse(atob(params.get("offer")));
+async function setOfferAndCreateAnswer(){
+    const offer = JSON.parse(offerArea.value);
+    initPeer();
     await pc.setRemoteDescription(offer);
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await waitForIceComplete();
 
-    const encoded = btoa(JSON.stringify(pc.localDescription));
-    const link = location.origin + location.pathname + "?answer=" + encoded;
+    await new Promise(resolve => {
+        pc.onicecandidate = e => {
+            if(!e.candidate) resolve();
+        };
+    });
 
-    prompt("Send this answer link back:", link);
-    log("Answer link created");
-  }
+    answerArea.value = JSON.stringify(pc.localDescription);
+    log("Answer generated! Send it back to the first person.");
+}
 
-  if(params.get("answer")){
-    const answer = JSON.parse(atob(params.get("answer")));
-    await pc.setRemoteDescription(answer);
-    log("Connected!");
-  }
+// Buttons
+document.getElementById('startBtn').onclick = startCamera;
+document.getElementById('createOfferBtn').onclick = createOffer;
+document.getElementById('setAnswerBtn').onclick = async ()=>{
+    if(offerArea.value && !answerArea.value){
+        await setOfferAndCreateAnswer();
+    } else {
+        await setAnswer();
+    }
 };
 </script>
 
