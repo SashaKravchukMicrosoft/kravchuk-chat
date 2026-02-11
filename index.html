@@ -2,113 +2,85 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Family P2P Video Chat</title>
+<title>Family Video Chat</title>
 <style>
-body { font-family: sans-serif; text-align: center; background:#111; color:#fff; }
-video { width: 45%; margin:10px; background:#000; border-radius:12px; }
-textarea { width:90%; height:80px; margin:5px; background:#222; color:#fff; border-radius:6px; padding:5px; }
-button { padding:10px 20px; margin:10px; font-size:16px; border-radius:8px; }
-#status { margin:10px; }
+body{font-family:sans-serif;text-align:center;background:#111;color:#fff;}
+video{width:45%;margin:10px;background:#000;border-radius:12px;}
+#status{margin:10px;}
 </style>
 </head>
 <body>
-
-<h2>Family P2P Video Chat</h2>
-
+<h2>Family Video Chat</h2>
 <video id="localVideo" autoplay muted playsinline></video>
 <video id="remoteVideo" autoplay playsinline></video>
-
-<div>
-<button id="startBtn">Start Camera</button>
-<button id="createOfferBtn">Create Offer</button>
-<button id="setAnswerBtn">Set Answer</button>
-</div>
-
-<textarea id="offerArea" placeholder="Offer / Paste here"></textarea>
-<textarea id="answerArea" placeholder="Answer / Paste here"></textarea>
-
-<p id="status"></p>
+<p id="status">Connecting...</p>
 
 <script>
-let localStream;
-let pc;
-
+let pc, localStream;
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
-const offerArea = document.getElementById('offerArea');
-const answerArea = document.getElementById('answerArea');
 const statusText = document.getElementById('status');
+
+// Введите ваши номера для комнаты: мама и тётя
+const myNumber = prompt("Введите ваш номер телефона");
+const peerNumber = prompt("Введите номер другого участника");
+
+// Base64-хэш для приватности
+const ROOM = btoa(myNumber + "-" + peerNumber);
+
+// Бесплатный публичный сигналинг WebSocket
+const SIGNALING_SERVER = "wss://demo.piesocket.com/v3/channel_1?api_key=demo";
+
+let ws;
 
 function log(msg){ statusText.innerText = msg; }
 
 async function startCamera(){
-    localStream = await navigator.mediaDevices.getUserMedia({video:true, audio:true});
+    localStream = await navigator.mediaDevices.getUserMedia({video:true,audio:true});
     localVideo.srcObject = localStream;
     log("Camera started");
 }
 
 function initPeer(){
     pc = new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
-
-    pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; };
-    pc.oniceconnectionstatechange = () => { log("ICE state: " + pc.iceConnectionState); };
-
-    if(localStream){
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    }
+    pc.ontrack = e => remoteVideo.srcObject = e.streams[0];
+    pc.onicecandidate = e => { if(e.candidate) ws.send(JSON.stringify({room:ROOM,candidate:e.candidate})); };
+    localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
 }
 
-async function createOffer(){
+async function start(){
+    await startCamera();
     initPeer();
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
 
-    await new Promise(resolve => {
-        pc.onicecandidate = e => {
-            if(!e.candidate) resolve();
-        };
-    });
+    ws = new WebSocket(SIGNALING_SERVER);
+    ws.onmessage = async (msg)=>{
+        let data = JSON.parse(msg.data);
+        if(data.room!==ROOM) return;
 
-    offerArea.value = JSON.stringify(pc.localDescription);
-    log("Offer created. Send it to the other person.");
+        if(data.offer && !pc.remoteDescription){
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send(JSON.stringify({room:ROOM,answer:answer}));
+            log("Connected! Peer answer sent.");
+        } else if(data.answer && !pc.localDescription?.type.includes("answer")){
+            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            log("Connected! Peer answer received.");
+        } else if(data.candidate){
+            try{ await pc.addIceCandidate(data.candidate); }catch(e){}
+        }
+    };
+
+    ws.onopen = async ()=>{
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        ws.send(JSON.stringify({room:ROOM,offer:offer}));
+        log("Waiting for peer to connect...");
+    };
 }
 
-async function setAnswer(){
-    if(!pc) initPeer();
-    const answer = JSON.parse(answerArea.value);
-    await pc.setRemoteDescription(answer);
-    log("Answer set! Connection should start shortly.");
-}
-
-async function setOfferAndCreateAnswer(){
-    const offer = JSON.parse(offerArea.value);
-    initPeer();
-    await pc.setRemoteDescription(offer);
-
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    await new Promise(resolve => {
-        pc.onicecandidate = e => {
-            if(!e.candidate) resolve();
-        };
-    });
-
-    answerArea.value = JSON.stringify(pc.localDescription);
-    log("Answer generated! Send it back to the first person.");
-}
-
-// Buttons
-document.getElementById('startBtn').onclick = startCamera;
-document.getElementById('createOfferBtn').onclick = createOffer;
-document.getElementById('setAnswerBtn').onclick = async ()=>{
-    if(offerArea.value && !answerArea.value){
-        await setOfferAndCreateAnswer();
-    } else {
-        await setAnswer();
-    }
-};
+// Запускаем всё автоматически
+start();
 </script>
-
 </body>
 </html>
