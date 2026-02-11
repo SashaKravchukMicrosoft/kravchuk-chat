@@ -32,7 +32,7 @@ async function startChat(){
     await startCamera();
     initPeer();
 
-    ws = new WebSocket("wss://demo.piesocket.com/v3/channel_1?api_key=demo");
+    ws = new WebSocket("wss://free.blr2.piesocket.com/v3/1?api_key=erThvvWxtJljLufJ79d2dGOrd4CQXtBpebRTjOuV&notify_self=1");
     
     ws.onopen = async ()=>{
         log("Подключено к сигналингу, ожидаем соединения...");
