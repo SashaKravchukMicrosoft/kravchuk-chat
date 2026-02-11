@@ -12,6 +12,8 @@ const micSelect = document.getElementById('micSelect');
 const outputSelect = document.getElementById('outputSelect');
 const micToggle = document.getElementById('micToggle');
 const outputToggle = document.getElementById('outputToggle');
+const roomSelect = document.getElementById('roomSelect');
+const roomThumb = document.getElementById('roomThumb');
 // Hide switch button on desktop immediately
 try{ if(!isMobile && switchCamBtn) switchCamBtn.style.display = 'none'; }catch(e){}
 // Hidden audio element to always play remote audio (prevents losing sound when swapping video elements)
@@ -30,6 +32,23 @@ function getRoomFromURL(){
         window.history.replaceState(null,null,'?room='+room);
     }
     return room;
+}
+
+function getSubroomFromURL(){
+    const params = new URLSearchParams(window.location.search);
+    let sub = params.get('subroom');
+    if(!sub){
+        // default to first logical subroom later when rooms populated
+        return null;
+    }
+    return sub;
+}
+
+// composite room string used for signaling scoping (cluster + subroom)
+function getCompositeRoom(){
+    const cluster = CLUSTER || getRoomFromURL();
+    const sub = SUBROOM || '';
+    return `${cluster}:${sub}`;
 }
 
 function getTurnFromURL(){
@@ -404,7 +423,7 @@ function swapVideos(){
 }
 
 function sendSignal(msg){
-    msg.room = ROOM;
+    msg.room = getCompositeRoom();
     msg.clientId = CLIENT_ID;
     try{ ws.send(JSON.stringify(msg)); }
     catch(e){ console.error('sendSignal failed', e); }
@@ -520,13 +539,56 @@ function stopJoinPing(){
     if(joinInterval){ clearInterval(joinInterval); joinInterval = null; }
 }
 
+// Define available subrooms (emoji thumbnail + long name)
+const ROOMS = [
+    { id: 'elephant', emoji: '🐘', name: 'Elephant Room' },
+    { id: 'giraffe',  emoji: '🦒', name: 'Giraffe Room' },
+    { id: 'lion',     emoji: '🦁', name: 'Lion Room' },
+    { id: 'monkey',   emoji: '🐒', name: 'Monkey Room' },
+    { id: 'panda',    emoji: '🐼', name: 'Panda Room' },
+    { id: 'fox',      emoji: '🦊', name: 'Fox Room' },
+    { id: 'rabbit',   emoji: '🐰', name: 'Rabbit Room' }
+];
+
+function populateRoomSelector(){
+    if(!roomSelect) return;
+    roomSelect.innerHTML = '';
+    ROOMS.forEach(r=>{
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.text = `${r.emoji} ${r.name}`;
+        roomSelect.appendChild(opt);
+    });
+    // choose SUBROOM if present, otherwise default to first
+    if(!SUBROOM) SUBROOM = ROOMS[0].id;
+    roomSelect.value = SUBROOM;
+    const chosen = ROOMS.find(x=>x.id===roomSelect.value) || ROOMS[0];
+    if(roomThumb) roomThumb.textContent = chosen.emoji;
+
+    roomSelect.onchange = ()=>{
+        const newId = roomSelect.value;
+        SUBROOM = newId;
+        const r = ROOMS.find(x=>x.id===newId);
+        if(roomThumb) roomThumb.textContent = (r && r.emoji) ? r.emoji : '';
+        // update URL param
+        const u = new URL(window.location.href);
+        u.searchParams.set('subroom', SUBROOM);
+        window.history.replaceState(null,null,u.toString());
+        // reset offer flag and restart connection to wait for peers in chosen subroom
+        hasSentOffer = false;
+        stopJoinPing();
+        restartChat();
+    };
+}
+
 async function startChat(){
     log("Запуск камеры...");
     await startCamera();
     initPeer();
 
-    // Use the ROOM value directly as both channel and api_key so each room gets an exclusive WS endpoint
-    const wsUrl = `wss://demo.piesocket.com/v3/${ROOM}?api_key=${ROOM}`;
+    // Use composite room (cluster:subroom) as channel key so each subroom is isolated
+    const composite = encodeURIComponent(getCompositeRoom());
+    const wsUrl = `wss://demo.piesocket.com/v3/${composite}?api_key=${composite}`;
     ws = new WebSocket(wsUrl);
 
     ws.onopen = async ()=>{
@@ -536,7 +598,7 @@ async function startChat(){
 
     ws.onmessage = async e=>{
         const data = JSON.parse(e.data);
-        if(data.room!==ROOM) return;
+        if(data.room!==getCompositeRoom()) return;
         if(data.clientId === CLIENT_ID) return; // ignore our own messages
 
         console.log('Signal received:', data);
@@ -616,13 +678,21 @@ switchCamBtn.onclick = async ()=>{
 // Рестарт после рассоединения
 async function restartChat(){
     try{
+        // reset offer state and stop any pinging before tearing down
+        hasSentOffer = false;
+        stopJoinPing();
         if(pc){ pc.close(); pc = null; }
         if(ws){ ws.close(); ws = null; }
         await startChat();
     }catch(e){ log("Ошибка при перезапуске"); }
 }
 
-// Инициализация
-const ROOM = getRoomFromURL();
-// populate device lists first, then start chat
-populateDeviceLists().then(()=>startChat()).catch(()=>startChat());
+// Инициализация: cluster (unique link) + subroom selection
+const CLUSTER = getRoomFromURL();
+let SUBROOM = getSubroomFromURL();
+
+// populate device lists and room selector first, then start chat
+populateDeviceLists().then(()=>{
+    populateRoomSelector();
+    startChat();
+}).catch(()=>{ populateRoomSelector(); startChat(); });

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Family P2P Video Chat</title>
+<title>🌶️TelePerchik P2P</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Disable caching as much as possible from the client side -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -21,6 +21,9 @@ button{padding:10px 15px;font-size:16px;border-radius:6px;background:transparent
 #micSelect.hidden,#outputSelect.hidden{display:none;position:relative}
 #micSelect{min-width:180px}
 #outputSelect{min-width:160px}
+/* room selector */
+#roomThumb{font-size:20px;display:inline-flex;align-items:center;justify-content:center;padding:6px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06)}
+#roomSelect{background:rgba(0,0,0,0.6);color:#fff;border:1px solid rgba(255,255,255,0.12);padding:6px;border-radius:6px;min-width:160px}
 </style>
 </head>
 <body>
@@ -32,6 +35,8 @@ button{padding:10px 15px;font-size:16px;border-radius:6px;background:transparent
 	<select id="micSelect" aria-label="Выбор микрофона" class="hidden"></select>
 	<button id="outputToggle" title="Выбрать выход">🔊</button>
 	<select id="outputSelect" aria-label="Выбор устройства вывода" class="hidden"></select>
+	<span id="roomThumb">🏷️</span>
+	<select id="roomSelect" aria-label="Выбор комнаты"></select>
 </div>
 <p id="status">Инициализация...</p>
 
