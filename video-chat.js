@@ -1,4 +1,6 @@
 let pc, localStream, ws, usingFrontCamera = true;
+const CLIENT_ID = Math.random().toString(36).substring(2,9);
+let hasSentOffer = false;
 const remoteVideo = document.getElementById('remoteVideo');
 const statusText = document.getElementById('status');
 const switchCamBtn = document.getElementById('switchCamBtn');
@@ -29,7 +31,7 @@ async function startCamera(){
 function initPeer(){
     pc = new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
     pc.ontrack = e => remoteVideo.srcObject = e.streams[0];
-    pc.onicecandidate = e => { if(e.candidate) sendSignal({candidate:e.candidate}); };
+    pc.onicecandidate = e => { if(e.candidate) sendSignal({type:'candidate', candidate:e.candidate}); };
     localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
     
     pc.onconnectionstatechange = ()=>{
@@ -55,38 +57,42 @@ async function startChat(){
     ws = new WebSocket("wss://demo.piesocket.com/v3/channel_1?api_key=demo");
 
     ws.onopen = async ()=>{
-        log("Сигналинг подключён, ожидаем собеседника...");
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        sendSignal({offer: offer});
-        log("Offer отправлен, ждём ответ...");
+        log("Сигналинг подключён, отправляю JOIN...");
+        sendSignal({type:'join'});
     };
 
     ws.onmessage = async e=>{
         const data = JSON.parse(e.data);
         if(data.room!==ROOM) return;
+        if(data.clientId === CLIENT_ID) return; // ignore our own messages
 
         console.log('Signal received:', data);
 
-        if(data.offer){
-            if(!pc.remoteDescription){
+        if(data.type === 'join'){
+            // Other peer joined — deterministic offer: higher clientId starts
+            if(!hasSentOffer && CLIENT_ID > data.clientId){
+                try{
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    sendSignal({type:'offer', offer});
+                    hasSentOffer = true;
+                    log("Offer отправлен, ждём ответ...");
+                }catch(err){ console.error('create/send offer failed', err); }
+            }
+        } else if(data.type === 'offer'){
+            try{
                 await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-                sendSignal({answer:answer});
+                sendSignal({type:'answer', answer});
                 log("Ответ отправлен, соединение устанавливается...");
-            } else {
-                console.warn('Received offer but remoteDescription already set; ignoring.');
-            }
-        } else if(data.answer){
-            // Accept answers unconditionally — needed when both peers exchanged offers (glare)
+            }catch(err){ console.error('handle offer failed', err); }
+        } else if(data.type === 'answer'){
             try{
                 await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
                 log("Соединение установлено!");
-            }catch(err){
-                console.error('Failed to set remote answer:', err);
-            }
-        } else if(data.candidate){
+            }catch(err){ console.error('set remote answer failed', err); }
+        } else if(data.type === 'candidate'){
             try{ await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }
             catch(e){ console.error('addIceCandidate failed', e); }
         }
