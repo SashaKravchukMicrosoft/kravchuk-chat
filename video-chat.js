@@ -10,6 +10,8 @@ const statusText = document.getElementById('status');
 const switchCamBtn = document.getElementById('switchCamBtn');
 const micSelect = document.getElementById('micSelect');
 const outputSelect = document.getElementById('outputSelect');
+const micToggle = document.getElementById('micToggle');
+const outputToggle = document.getElementById('outputToggle');
 // Hide switch button on desktop immediately
 try{ if(!isMobile && switchCamBtn) switchCamBtn.style.display = 'none'; }catch(e){}
 // Hidden audio element to always play remote audio (prevents losing sound when swapping video elements)
@@ -234,7 +236,7 @@ async function populateDeviceLists(){
                 opt.text = m.label || `Микрофон ${micSelect.length+1}`;
                 micSelect.appendChild(opt);
             });
-            micSelect.onchange = handleMicChange;
+            micSelect.onchange = ()=>{ handleMicChange(); micSelect.classList.add('hidden'); };
         }
         if(outputSelect){
             outputSelect.innerHTML = '';
@@ -244,9 +246,34 @@ async function populateDeviceLists(){
                 opt.text = o.label || `Динамик ${outputSelect.length+1}`;
                 outputSelect.appendChild(opt);
             });
-            outputSelect.onchange = handleOutputChange;
+            outputSelect.onchange = ()=>{ handleOutputChange(); outputSelect.classList.add('hidden'); };
         }
     }catch(e){ console.error('enumerateDevices failed', e); }
+}
+
+// mic toggle shows/hides compact mic select
+if(micToggle){
+    micToggle.onclick = (ev)=>{
+        if(!micSelect) return;
+        if(micSelect.classList.contains('hidden')){
+            micSelect.classList.remove('hidden');
+            // focus so keyboard users can use it
+            setTimeout(()=>micSelect.focus(),50);
+        } else {
+            micSelect.classList.add('hidden');
+        }
+    };
+}
+if(outputToggle){
+    outputToggle.onclick = (ev)=>{
+        if(!outputSelect) return;
+        if(outputSelect.classList.contains('hidden')){
+            outputSelect.classList.remove('hidden');
+            setTimeout(()=>outputSelect.focus(),50);
+        } else {
+            outputSelect.classList.add('hidden');
+        }
+    };
 }
 
 async function handleMicChange(){

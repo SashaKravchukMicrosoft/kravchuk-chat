@@ -10,17 +10,24 @@ video{width:100vw;height:100vh;object-fit:cover;background:#000;}
 button{position:fixed;top:10px;left:10px;padding:10px 15px;font-size:16px;border-radius:6px;}
 #status{position:fixed;bottom:10px;width:100%;text-align:center;font-size:14px;}
 #controls{position:fixed;top:10px;left:10px;display:flex;gap:8px;align-items:center}
-#switchCamBtn{background:transparent;border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;padding:10px}
-#micSelect,#outputSelect{background:rgba(0,0,0,0.4);color:#fff;border:1px solid rgba(255,255,255,0.15);padding:8px;border-radius:6px}
+#switchCamBtn{background:transparent;border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;padding:8px 10px;border-radius:6px}
+#micToggle{background:transparent;border:1px solid rgba(255,255,255,0.15);color:#fff;cursor:pointer;padding:8px;border-radius:6px}
+#micSelect,#outputSelect{background:rgba(0,0,0,0.6);color:#fff;border:1px solid rgba(255,255,255,0.12);padding:6px;border-radius:6px}
+#micSelect.hidden,#outputSelect.hidden{display:none;position:relative}
+#micSelect{min-width:180px}
+#outputSelect{min-width:160px}
+#outputToggle{background:transparent;border:1px solid rgba(255,255,255,0.15);color:#fff;cursor:pointer;padding:8px;border-radius:6px}
 </style>
 </head>
 <body>
 
 <video id="remoteVideo" autoplay playsinline></video>
 <div id="controls">
-	<button id="switchCamBtn">📷 Перевернуть камеру</button>
-	<select id="micSelect" aria-label="Выбор микрофона"></select>
-	<select id="outputSelect" aria-label="Выбор устройства вывода"></select>
+	<button id="switchCamBtn">📷</button>
+	<button id="micToggle" title="Выбрать микрофон">🎙️</button>
+	<select id="micSelect" aria-label="Выбор микрофона" class="hidden"></select>
+	<button id="outputToggle" title="Выбрать выход">🔊</button>
+	<select id="outputSelect" aria-label="Выбор устройства вывода" class="hidden"></select>
 </div>
 <p id="status">Инициализация...</p>
 
