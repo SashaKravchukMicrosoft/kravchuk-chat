@@ -2,6 +2,7 @@ let pc, localStream, ws, usingFrontCamera = true;
 const CLIENT_ID = Math.random().toString(36).substring(2,9);
 let hasSentOffer = false;
 let joinInterval = null;
+let EXPECTED_WS_CLOSE = false; // when true, suppress normal ws close log
 const isMobile = (('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.innerWidth < 768);
 let localMini = null;
 let isSwapped = false;
@@ -634,7 +635,7 @@ async function startChat(){
     };
 
     ws.onerror = e => { console.error('ws error', e); log("Ошибка сигналинга"); };
-    ws.onclose = () => { stopJoinPing(); log("Сигналинг закрыт"); };
+    ws.onclose = () => { stopJoinPing(); if(EXPECTED_WS_CLOSE){ EXPECTED_WS_CLOSE = false; return; } log("Сигналинг закрыт"); };
 }
 
 // Переключение камеры
