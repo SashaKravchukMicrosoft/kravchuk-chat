@@ -8,6 +8,8 @@ let isSwapped = false;
 const remoteVideo = document.getElementById('remoteVideo');
 const statusText = document.getElementById('status');
 const switchCamBtn = document.getElementById('switchCamBtn');
+// Hide switch button on desktop immediately
+try{ if(!isMobile && switchCamBtn) switchCamBtn.style.display = 'none'; }catch(e){}
 // Hidden audio element to always play remote audio (prevents losing sound when swapping video elements)
 const remoteAudio = document.createElement('audio');
 remoteAudio.autoplay = true;
@@ -47,11 +49,14 @@ async function startCamera(){
     if(!localMini) createLocalMini();
     if(!isSwapped){
         localMini.srcObject = localStream;
-        localMini.style.transform = 'scaleX(-1)';
+        // mirror only when using front camera
+        localMini.style.transform = usingFrontCamera ? 'scaleX(-1)' : 'scaleX(1)';
     } else {
         // if swapped, main remoteVideo shows local preview — keep video muted to avoid echo
         remoteVideo.srcObject = localStream;
         remoteVideo.muted = true;
+        // ensure main (large) video is not mirrored
+        remoteVideo.style.transform = 'scaleX(1)';
     }
 }
 
@@ -130,9 +135,11 @@ function swapVideos(){
     const b = localMini.srcObject;
     remoteVideo.srcObject = b;
     localMini.srcObject = a;
-    // keep local preview mirrored when it shows localStream
-    if(localMini.srcObject === localStream) localMini.style.transform = 'scaleX(-1)';
+    // keep local preview mirrored only when it shows localStream AND it's the front camera
+    if(localMini.srcObject === localStream) localMini.style.transform = usingFrontCamera ? 'scaleX(-1)' : 'scaleX(1)';
     else localMini.style.transform = 'scaleX(1)';
+    // ensure main (large) video is not mirrored
+    remoteVideo.style.transform = 'scaleX(1)';
     isSwapped = !isSwapped;
 }
 
