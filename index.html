@@ -9,13 +9,19 @@ body{margin:0;font-family:sans-serif;background:#111;color:#fff;text-align:cente
 video{width:100vw;height:100vh;object-fit:cover;background:#000;}
 button{position:fixed;top:10px;left:10px;padding:10px 15px;font-size:16px;border-radius:6px;}
 #status{position:fixed;bottom:10px;width:100%;text-align:center;font-size:14px;}
-#switchCamBtn{background:transparent;border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;}
+#controls{position:fixed;top:10px;left:10px;display:flex;gap:8px;align-items:center}
+#switchCamBtn{background:transparent;border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;padding:10px}
+#micSelect,#outputSelect{background:rgba(0,0,0,0.4);color:#fff;border:1px solid rgba(255,255,255,0.15);padding:8px;border-radius:6px}
 </style>
 </head>
 <body>
 
 <video id="remoteVideo" autoplay playsinline></video>
-<button id="switchCamBtn">📷 Перевернуть камеру</button>
+<div id="controls">
+	<button id="switchCamBtn">📷 Перевернуть камеру</button>
+	<select id="micSelect" aria-label="Выбор микрофона"></select>
+	<select id="outputSelect" aria-label="Выбор устройства вывода"></select>
+</div>
 <p id="status">Инициализация...</p>
 
 <script src="video-chat.js"></script>

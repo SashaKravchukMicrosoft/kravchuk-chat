@@ -8,6 +8,8 @@ let isSwapped = false;
 const remoteVideo = document.getElementById('remoteVideo');
 const statusText = document.getElementById('status');
 const switchCamBtn = document.getElementById('switchCamBtn');
+const micSelect = document.getElementById('micSelect');
+const outputSelect = document.getElementById('outputSelect');
 // Hide switch button on desktop immediately
 try{ if(!isMobile && switchCamBtn) switchCamBtn.style.display = 'none'; }catch(e){}
 // Hidden audio element to always play remote audio (prevents losing sound when swapping video elements)
@@ -217,6 +219,72 @@ function startJoinPing(){
     joinInterval = setInterval(sendJoin, 3000);
 }
 
+// Populate mic/output device lists
+async function populateDeviceLists(){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try{
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter(d=>d.kind==='audioinput');
+        const outputs = devices.filter(d=>d.kind==='audiooutput');
+        if(micSelect){
+            micSelect.innerHTML = '';
+            mics.forEach(m=>{
+                const opt = document.createElement('option');
+                opt.value = m.deviceId;
+                opt.text = m.label || `Микрофон ${micSelect.length+1}`;
+                micSelect.appendChild(opt);
+            });
+            micSelect.onchange = handleMicChange;
+        }
+        if(outputSelect){
+            outputSelect.innerHTML = '';
+            outputs.forEach(o=>{
+                const opt = document.createElement('option');
+                opt.value = o.deviceId;
+                opt.text = o.label || `Динамик ${outputSelect.length+1}`;
+                outputSelect.appendChild(opt);
+            });
+            outputSelect.onchange = handleOutputChange;
+        }
+    }catch(e){ console.error('enumerateDevices failed', e); }
+}
+
+async function handleMicChange(){
+    const id = micSelect.value;
+    if(!id) return;
+    try{
+        const s = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: id } }, video: false });
+        const newTrack = s.getAudioTracks()[0];
+        // replace on pc if available
+        if(pc){
+            const audioSender = pc.getSenders().find(s=>s.track && s.track.kind==='audio');
+            if(audioSender){
+                await audioSender.replaceTrack(newTrack);
+            } else {
+                pc.addTrack(newTrack, s);
+            }
+        }
+        // update localStream
+        if(localStream){
+            localStream.getAudioTracks().forEach(t=>{ t.stop(); try{ localStream.removeTrack(t); }catch(e){} });
+            localStream.addTrack(newTrack);
+        } else {
+            localStream = s;
+        }
+    }catch(e){ console.error('switch mic failed', e); }
+}
+
+async function handleOutputChange(){
+    const id = outputSelect.value;
+    if(!id) return;
+    if(typeof remoteAudio.setSinkId === 'function'){
+        try{ await remoteAudio.setSinkId(id); }
+        catch(e){ console.warn('setSinkId failed', e); }
+    } else {
+        console.warn('setSinkId not supported in this browser');
+    }
+}
+
 function stopJoinPing(){
     if(joinInterval){ clearInterval(joinInterval); joinInterval = null; }
 }
@@ -325,4 +393,5 @@ async function restartChat(){
 
 // Инициализация
 const ROOM = getRoomFromURL();
-startChat();
+// populate device lists first, then start chat
+populateDeviceLists().then(()=>startChat()).catch(()=>startChat());
