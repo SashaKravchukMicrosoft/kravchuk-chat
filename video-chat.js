@@ -215,8 +215,6 @@ function initPeer(){
         { urls: 'stun:stun1.voiceeclipse.net:3478' },
         { urls: 'stun:stunserver.org:3478' },
         // TURN servers with credentials (examples provided)
-        { urls: 'turn:turn01.hubl.in?transport=udp' },
-        { urls: 'turn:turn02.hubl.in?transport=tcp' },
         { urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh' },
         { urls: 'turn:192.158.29.39:3478?transport=udp', username: '28224511:1379330808', credential: 'JZEOEt2V3Qb0y27GRntt2u2PAYA=' },
         { urls: 'turn:192.158.29.39:3478?transport=tcp', username: '28224511:1379330808', credential: 'JZEOEt2V3Qb0y27GRntt2u2PAYA=' },
@@ -249,7 +247,6 @@ function initPeer(){
         console.warn('Some TURN entries were removed from iceServers because they lacked credentials.');
     }
 
-    pc = new RTCPeerConnection({ iceServers: finalIceServers });
     pc.ontrack = e => {
         const remote = e.streams[0];
         try{ remoteAudio.srcObject = remote; }
