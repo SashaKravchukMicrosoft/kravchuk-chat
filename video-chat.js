@@ -127,7 +127,14 @@ function createLocalMini(){
     // Drag & click handling: distinguish drag from click
     let dragState = { dragging: false, startX:0, startY:0, origLeft:0, origTop:0 };
     localMini.addEventListener('pointerdown', (ev)=>{
+        // prevent native selection/dragging while we handle custom drag
+        ev.preventDefault();
         localMini.setPointerCapture(ev.pointerId);
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
+        document.documentElement.style.cursor = 'grabbing';
+        localMini.style.touchAction = 'none';
+        localMini.draggable = false;
         dragState.dragging = true;
         dragState.startX = ev.clientX;
         dragState.startY = ev.clientY;
@@ -143,6 +150,7 @@ function createLocalMini(){
 
         function onPointerMove(e){
             if(!dragState.dragging) return;
+            e.preventDefault();
             const dx = e.clientX - dragState.startX;
             const dy = e.clientY - dragState.startY;
             localMini.style.left = (dragState.origLeft + dx) + 'px';
@@ -151,6 +159,11 @@ function createLocalMini(){
 
         function onPointerUp(e){
             localMini.releasePointerCapture(ev.pointerId);
+            // restore selection/cursor behavior
+            document.body.style.userSelect = '';
+            document.body.style.webkitUserSelect = '';
+            document.documentElement.style.cursor = '';
+            localMini.style.touchAction = 'auto';
             dragState.dragging = false;
             document.removeEventListener('pointermove', onPointerMove);
             document.removeEventListener('pointerup', onPointerUp);
