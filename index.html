@@ -6,7 +6,7 @@
 <style>
 body{font-family:sans-serif;text-align:center;background:#111;color:#fff;}
 video{width:45%;margin:10px;background:#000;border-radius:12px;}
-textarea{width:90%;height:80px;margin:5px;background:#222;color:#fff;border-radius:6px;padding:5px;}
+input{padding:8px;font-size:16px;margin:5px;border-radius:6px;}
 button{padding:10px 20px;margin:10px;font-size:16px;border-radius:8px;}
 #status{margin:10px;}
 </style>
@@ -15,87 +15,17 @@ button{padding:10px 20px;margin:10px;font-size:16px;border-radius:8px;}
 
 <h2>Family P2P Video Chat</h2>
 
-<video id="localVideo" autoplay muted playsinline></video>
-<video id="remoteVideo" autoplay playsinline></video>
+<input id="myNumber" placeholder="Ваш номер" type="text">
+<input id="peerNumber" placeholder="Номер собеседника" type="text">
+<button id="startBtn">Start Video Chat</button>
 
 <div>
-<button id="startCameraBtn">Start Camera</button>
-<button id="createOfferBtn">Create Offer</button>
-<button id="setAnswerBtn">Set Remote Answer</button>
+<video id="localVideo" autoplay muted playsinline></video>
+<video id="remoteVideo" autoplay playsinline></video>
 </div>
 
-<textarea id="offerArea" placeholder="Offer / Paste here"></textarea>
-<textarea id="answerArea" placeholder="Answer / Paste here"></textarea>
+<p id="status">Введите номера и нажмите Start</p>
 
-<p id="status"></p>
-
-<script>
-let localStream;
-let pc;
-
-const localVideo = document.getElementById('localVideo');
-const remoteVideo = document.getElementById('remoteVideo');
-const offerArea = document.getElementById('offerArea');
-const answerArea = document.getElementById('answerArea');
-const statusText = document.getElementById('status');
-
-function log(msg){ statusText.innerText = msg; }
-
-async function startCamera(){
-    localStream = await navigator.mediaDevices.getUserMedia({video:true,audio:true});
-    localVideo.srcObject = localStream;
-    log("Camera started");
-}
-
-function initPeer(){
-    pc = new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
-    pc.ontrack = e => remoteVideo.srcObject = e.streams[0];
-    pc.oniceconnectionstatechange = () => log("ICE state: " + pc.iceConnectionState);
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-}
-
-async function createOffer(){
-    initPeer();
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await new Promise(resolve => { pc.onicecandidate = e => { if(!e.candidate) resolve(); }; });
-    offerArea.value = JSON.stringify(pc.localDescription);
-    log("Offer created! Send this text to your peer.");
-}
-
-async function setRemoteAnswer(){
-    const answer = JSON.parse(answerArea.value);
-    await pc.setRemoteDescription(answer);
-    log("Answer set! Connection should start shortly.");
-}
-
-async function answerToOffer(){
-    const offer = JSON.parse(offerArea.value);
-    initPeer();
-    await pc.setRemoteDescription(offer);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    await new Promise(resolve => { pc.onicecandidate = e => { if(!e.candidate) resolve(); }; });
-    answerArea.value = JSON.stringify(pc.localDescription);
-    log("Answer generated! Send it back to the first peer.");
-}
-
-// Кнопки
-document.getElementById('startCameraBtn').onclick = startCamera;
-document.getElementById('createOfferBtn').onclick = async () => {
-    if(!localStream) await startCamera();
-    await createOffer();
-};
-document.getElementById('setAnswerBtn').onclick = async () => {
-    if(pc && offerArea.value && answerArea.value){
-        await setRemoteAnswer();
-    } else if(offerArea.value && !answerArea.value){
-        await answerToOffer();
-    } else {
-        log("Paste offer first.");
-    }
-};
-</script>
-
+<script src="video-chat.js"></script>
 </body>
 </html>
