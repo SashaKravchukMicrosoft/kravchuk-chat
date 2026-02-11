@@ -77,9 +77,8 @@ async function startChat(){
     await startCamera();
     initPeer();
 
-    // Use the ROOM value as both channel and api_key so each room gets an exclusive WS endpoint
-    const safeRoom = encodeURIComponent(ROOM);
-    const wsUrl = `wss://demo.piesocket.com/v3/${safeRoom}?api_key=${safeRoom}`;
+    // Use the ROOM value directly as both channel and api_key so each room gets an exclusive WS endpoint
+    const wsUrl = `wss://demo.piesocket.com/v3/${ROOM}?api_key=${ROOM}`;
     ws = new WebSocket(wsUrl);
 
     ws.onopen = async ()=>{
