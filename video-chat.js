@@ -1,6 +1,7 @@
 let pc, localStream, ws, usingFrontCamera = true;
 const CLIENT_ID = Math.random().toString(36).substring(2,9);
 let hasSentOffer = false;
+let joinInterval = null;
 const remoteVideo = document.getElementById('remoteVideo');
 const statusText = document.getElementById('status');
 const switchCamBtn = document.getElementById('switchCamBtn');
@@ -40,13 +41,35 @@ function initPeer(){
             restartChat();
         } else if(pc.connectionState==='connected'){
             log("Соединение установлено!");
+            stopJoinPing();
         }
     };
 }
 
 function sendSignal(msg){
     msg.room = ROOM;
-    ws.send(JSON.stringify(msg));
+    msg.clientId = CLIENT_ID;
+    try{ ws.send(JSON.stringify(msg)); }
+    catch(e){ console.error('sendSignal failed', e); }
+}
+
+function startJoinPing(){
+    stopJoinPing();
+    // send immediately then every 3s until we have an offer/connection
+    const sendJoin = ()=>{
+        if(!ws || ws.readyState !== WebSocket.OPEN) return;
+        if(pc && (pc.connectionState==='connected' || pc.remoteDescription)){
+            stopJoinPing();
+            return;
+        }
+        sendSignal({type:'join'});
+    };
+    sendJoin();
+    joinInterval = setInterval(sendJoin, 3000);
+}
+
+function stopJoinPing(){
+    if(joinInterval){ clearInterval(joinInterval); joinInterval = null; }
 }
 
 async function startChat(){
@@ -58,7 +81,7 @@ async function startChat(){
 
     ws.onopen = async ()=>{
         log("Сигналинг подключён, отправляю JOIN...");
-        sendSignal({type:'join'});
+        startJoinPing();
     };
 
     ws.onmessage = async e=>{
@@ -98,8 +121,8 @@ async function startChat(){
         }
     };
 
-    ws.onerror = e => log("Ошибка сигналинга");
-    ws.onclose = () => log("Сигналинг закрыт");
+    ws.onerror = e => { console.error('ws error', e); log("Ошибка сигналинга"); };
+    ws.onclose = () => { stopJoinPing(); log("Сигналинг закрыт"); };
 }
 
 // Переключение камеры
