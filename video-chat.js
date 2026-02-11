@@ -13,6 +13,9 @@ const micSelect = document.getElementById('micSelect');
 const outputSelect = document.getElementById('outputSelect');
 const micToggle = document.getElementById('micToggle');
 const outputToggle = document.getElementById('outputToggle');
+const hangupBtn = document.getElementById('hangupBtn');
+const refreshBtn = document.getElementById('refreshBtn');
+
 const roomSelect = document.getElementById('roomSelect');
 const roomThumb = document.getElementById('roomThumb');
 // Hide switch button on desktop immediately
@@ -500,6 +503,55 @@ if(outputToggle){
     };
 }
 
+// room toggle (collapsed by default)
+if(roomThumb){
+    roomThumb.onclick = (ev)=>{
+        if(!roomSelect) return;
+        if(roomSelect.classList.contains('hidden')){
+            roomSelect.classList.remove('hidden');
+            setTimeout(()=>roomSelect.focus(),50);
+        } else {
+            roomSelect.classList.add('hidden');
+        }
+    };
+}
+
+// Hangup / Refresh buttons behavior
+async function hangupCall(){
+    try{
+        hasSentOffer = false;
+        stopJoinPing();
+        if(ws){ EXPECTED_WS_CLOSE = true; try{ ws.close(); }catch(e){} ws = null; }
+        if(pc){ try{ pc.close(); }catch(e){} pc = null; }
+        if(localStream){ localStream.getTracks().forEach(t=>t.stop()); }
+        log('Звонок сброшен');
+    }catch(e){ console.error('hangup failed', e); }
+}
+
+if(hangupBtn){
+    hangupBtn.onclick = (ev)=>{
+        if(pc && pc.connectionState==='connected'){
+            hangupCall();
+        } else {
+            // if not connected, act as a nop or give feedback
+            log('Нет активного соединения');
+        }
+    };
+}
+
+if(refreshBtn){
+    refreshBtn.onclick = (ev)=>{
+        // only refresh if not connected
+        if(pc && pc.connectionState==='connected'){
+            log('Соединение активно — сбросьте звонок сначала');
+            return;
+        }
+        const u = new URL(window.location.href);
+        u.searchParams.set('_', Date.now());
+        window.location.href = u.toString();
+    };
+}
+
 async function handleMicChange(){
     const id = micSelect.value;
     if(!id) return;
@@ -682,8 +734,8 @@ async function restartChat(){
         // reset offer state and stop any pinging before tearing down
         hasSentOffer = false;
         stopJoinPing();
-        if(pc){ pc.close(); pc = null; }
-        if(ws){ ws.close(); ws = null; }
+        if(ws){ EXPECTED_WS_CLOSE = true; try{ ws.close(); }catch(e){} ws = null; }
+        if(pc){ try{ pc.close(); }catch(e){} pc = null; }
         await startChat();
     }catch(e){ log("Ошибка при перезапуске"); }
 }
