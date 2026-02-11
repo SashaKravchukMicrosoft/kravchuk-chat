@@ -247,6 +247,24 @@ function initPeer(){
         console.warn('Some TURN entries were removed from iceServers because they lacked credentials.');
     }
 
+    // Create RTCPeerConnection, fall back to STUN-only list if needed
+    try{
+        pc = new RTCPeerConnection({ iceServers: finalIceServers });
+    }catch(err){
+        console.warn('RTCPeerConnection failed with provided iceServers, retrying with STUN-only list', err);
+        const stunOnly = finalIceServers.filter(s => {
+            const urls = s.urls || s.url || '';
+            const urlStr = Array.isArray(urls) ? urls.join(' ') : String(urls);
+            return !(urlStr.startsWith('turn:') || urlStr.startsWith('turns:'));
+        });
+        try{
+            pc = new RTCPeerConnection({ iceServers: stunOnly });
+        }catch(err2){
+            console.error('Failed to create RTCPeerConnection even with STUN-only list', err2);
+            throw err2;
+        }
+    }
+
     pc.ontrack = e => {
         const remote = e.streams[0];
         try{ remoteAudio.srcObject = remote; }
