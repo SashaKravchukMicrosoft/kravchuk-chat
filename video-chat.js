@@ -2,6 +2,9 @@ let pc, localStream, ws, usingFrontCamera = true;
 const CLIENT_ID = Math.random().toString(36).substring(2,9);
 let hasSentOffer = false;
 let joinInterval = null;
+const isMobile = (('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.innerWidth < 768);
+let localMini = null;
+let isSwapped = false;
 const remoteVideo = document.getElementById('remoteVideo');
 const statusText = document.getElementById('status');
 const switchCamBtn = document.getElementById('switchCamBtn');
@@ -35,6 +38,15 @@ async function startCamera(){
         audio: true
     };
     localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    // ensure mini preview exists and set its source
+    if(!localMini) createLocalMini();
+    if(!isSwapped){
+        localMini.srcObject = localStream;
+        localMini.style.transform = 'scaleX(-1)';
+    } else {
+        // if swapped, main remoteVideo shows local preview
+        remoteVideo.srcObject = localStream;
+    }
 }
 
 function initPeer(){
@@ -47,7 +59,15 @@ function initPeer(){
         iceServers.push(turnEntry);
     }
     pc = new RTCPeerConnection({ iceServers });
-    pc.ontrack = e => remoteVideo.srcObject = e.streams[0];
+    pc.ontrack = e => {
+        const remote = e.streams[0];
+        if(localMini && isSwapped){
+            localMini.srcObject = remote;
+            localMini.style.transform = 'scaleX(1)';
+        } else {
+            remoteVideo.srcObject = remote;
+        }
+    };
     pc.onicecandidate = e => { if(e.candidate) sendSignal({type:'candidate', candidate:e.candidate}); };
     localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
     
