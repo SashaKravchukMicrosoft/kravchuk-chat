@@ -146,12 +146,39 @@ async function startChat(){
 // Переключение камеры
 switchCamBtn.onclick = async ()=>{
     usingFrontCamera = !usingFrontCamera;
-    if(localStream) localStream.getTracks().forEach(t=>t.stop());
-    await startCamera();
-    if(pc){
-        localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+    try{
+        // Try to get a new video track only and replace the existing sender's track
+        const newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, audio: false });
+        const newVideoTrack = newStream.getVideoTracks()[0];
+
+        if(pc){
+            const senders = pc.getSenders();
+            const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+            if(videoSender){
+                await videoSender.replaceTrack(newVideoTrack);
+            } else {
+                // Fallback: add track if no sender found
+                pc.addTrack(newVideoTrack, localStream || newStream);
+            }
+        }
+
+        // Replace tracks in our local stream preview/state
+        if(localStream){
+            localStream.getVideoTracks().forEach(t=>{ t.stop(); localStream.removeTrack(t); });
+            localStream.addTrack(newVideoTrack);
+        } else {
+            localStream = newStream;
+        }
+
+        log("Камера переключена");
+    }catch(err){
+        console.error('switch camera failed', err);
+        // Fallback to full restart if replace fails
+        if(localStream) localStream.getTracks().forEach(t=>t.stop());
+        await startCamera();
+        if(pc){ localStream.getTracks().forEach(t=>pc.addTrack(t,localStream)); }
+        log("Камера переключена (перезапуск)");
     }
-    log("Камера переключена");
 };
 
 // Рестарт после рассоединения
