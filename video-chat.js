@@ -1,13 +1,29 @@
-let localStream, pc, ws;
-const localVideo = document.getElementById('localVideo');
+let pc, localStream, ws, usingFrontCamera = true;
 const remoteVideo = document.getElementById('remoteVideo');
 const statusText = document.getElementById('status');
+const switchCamBtn = document.getElementById('switchCamBtn');
 
 function log(msg){ statusText.innerText = msg; }
 
+function getRoomFromURL(){
+    const params = new URLSearchParams(window.location.search);
+    let room = params.get('room');
+    if(!room){
+        room = Math.random().toString(36).substring(2,8); // случайный код комнаты
+        window.history.replaceState(null,null,'?room='+room);
+    }
+    return room;
+}
+
 async function startCamera(){
-    localStream = await navigator.mediaDevices.getUserMedia({video:true,audio:true});
-    localVideo.srcObject = localStream;
+    if(localStream){
+        localStream.getTracks().forEach(t=>t.stop());
+    }
+    const constraints = {
+        video: {facingMode: usingFrontCamera ? 'user' : 'environment'},
+        audio: true
+    };
+    localStream = await navigator.mediaDevices.getUserMedia(constraints);
 }
 
 function initPeer(){
@@ -15,35 +31,39 @@ function initPeer(){
     pc.ontrack = e => remoteVideo.srcObject = e.streams[0];
     pc.onicecandidate = e => { if(e.candidate) sendSignal({candidate:e.candidate}); };
     localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+    
+    pc.onconnectionstatechange = ()=>{
+        if(pc.connectionState==='disconnected' || pc.connectionState==='failed'){
+            log("Собеседник отключился, перезапуск...");
+            restartChat();
+        } else if(pc.connectionState==='connected'){
+            log("Соединение установлено!");
+        }
+    };
 }
 
-function sendSignal(message){
-    message.room = ROOM;
-    ws.send(JSON.stringify(message));
+function sendSignal(msg){
+    msg.room = ROOM;
+    ws.send(JSON.stringify(msg));
 }
 
 async function startChat(){
-    const myNumber = document.getElementById('myNumber').value.trim();
-    const peerNumber = document.getElementById('peerNumber').value.trim();
-    if(!myNumber || !peerNumber){ log("Введите оба номера!"); return; }
-
-    window.ROOM = btoa(myNumber + "-" + peerNumber);
-
+    log("Запуск камеры...");
     await startCamera();
     initPeer();
 
-    ws = new WebSocket("wss://free.blr2.piesocket.com/v3/1?api_key=erThvvWxtJljLufJ79d2dGOrd4CQXtBpebRTjOuV");
-    
+    ws = new WebSocket("wss://demo.piesocket.com/v3/channel_1?api_key=demo");
+
     ws.onopen = async ()=>{
-        log("Подключено к сигналингу, ожидаем соединения...");
+        log("Сигналинг подключён, ожидаем собеседника...");
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         sendSignal({offer: offer});
-        log("Offer отправлен, ждём собеседника...");
+        log("Offer отправлен, ждём ответ...");
     };
 
-    ws.onmessage = async msg=>{
-        const data = JSON.parse(msg.data);
+    ws.onmessage = async e=>{
+        const data = JSON.parse(e.data);
         if(data.room!==ROOM) return;
 
         if(data.offer && !pc.remoteDescription){
@@ -51,7 +71,7 @@ async function startChat(){
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             sendSignal({answer:answer});
-            log("Ответ отправлен! Соединение устанавливается...");
+            log("Ответ отправлен, соединение устанавливается...");
         } else if(data.answer && !pc.remoteDescription){
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
             log("Соединение установлено!");
@@ -60,8 +80,30 @@ async function startChat(){
         }
     };
 
-    ws.onerror = e => log("Ошибка сигналинга: " + e.message);
-    ws.onclose = () => log("Сигналинг соединение закрыто");
+    ws.onerror = e => log("Ошибка сигналинга");
+    ws.onclose = () => log("Сигналинг закрыт");
 }
 
-document.getElementById('startBtn').onclick = startChat;
+// Переключение камеры
+switchCamBtn.onclick = async ()=>{
+    usingFrontCamera = !usingFrontCamera;
+    if(localStream) localStream.getTracks().forEach(t=>t.stop());
+    await startCamera();
+    if(pc){
+        localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+    }
+    log("Камера переключена");
+};
+
+// Рестарт после рассоединения
+async function restartChat(){
+    try{
+        if(pc){ pc.close(); pc = null; }
+        if(ws){ ws.close(); ws = null; }
+        await startChat();
+    }catch(e){ log("Ошибка при перезапуске"); }
+}
+
+// Инициализация
+const ROOM = getRoomFromURL();
+startChat();
