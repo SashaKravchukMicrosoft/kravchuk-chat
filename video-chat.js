@@ -595,13 +595,13 @@ function stopJoinPing(){
 
 // Define available subrooms (emoji thumbnail + long name)
 const ROOMS = [
-    { id: 'elephant', emoji: '🐘', name: 'Elephant Room' },
-    { id: 'giraffe',  emoji: '🦒', name: 'Giraffe Room' },
-    { id: 'lion',     emoji: '🦁', name: 'Lion Room' },
-    { id: 'monkey',   emoji: '🐒', name: 'Monkey Room' },
-    { id: 'panda',    emoji: '🐼', name: 'Panda Room' },
-    { id: 'fox',      emoji: '🦊', name: 'Fox Room' },
-    { id: 'rabbit',   emoji: '🐰', name: 'Rabbit Room' }
+    { id: 'elephant', emoji: '🐘', name: 'Комната Слона' },
+    { id: 'giraffe',  emoji: '🦒', name: 'Комната Жирафа' },
+    { id: 'lion',     emoji: '🦁', name: 'Комната Льва' },
+    { id: 'monkey',   emoji: '🐒', name: 'Комната Обезьяны' },
+    { id: 'panda',    emoji: '🐼', name: 'Комната Панды' },
+    { id: 'fox',      emoji: '🦊', name: 'Комната Лисы' },
+    { id: 'rabbit',   emoji: '🐰', name: 'Комната Кролика' }
 ];
 
 function populateRoomSelector(){
@@ -648,7 +648,7 @@ async function startChat(){
     const piesocketHost = params.get('piesocketHost') || 's15819.blr1.piesocket.com';
     // apiKey should default to the `room` (cluster) value — do not set it to the subroom.
     const apiKey = params.get('apiKey') || params.get('api_key') || CLUSTER;
-    const wsUrl = `wss://${piesocketHost}/v3/${encodeURIComponent(SUBROOM)}?api_key=${encodeURIComponent(apiKey)}`;
+    const wsUrl = `wss://${piesocketHost}/v3/${encodeURIComponent(SUBROOM)}${encodeURIComponent(apiKey)}?api_key=${encodeURIComponent(apiKey)}`;
     ws = new WebSocket(wsUrl);
 
     // mark socket as opened when onopen fires
