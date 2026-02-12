@@ -640,9 +640,15 @@ async function startChat(){
     await startCamera();
     initPeer();
 
-    // Use composite room (cluster:subroom) as channel key so each subroom is isolated
+    // Use composite room (cluster:subroom) for in-message scoping only
     const composite = encodeURIComponent(getCompositeRoom());
-    const wsUrl = `wss://s15819.blr1.piesocket.com/v3/${composite}?api_key=${composite}`;
+    // The PieSocket channel (path) and api_key must remain the cluster (original `room` param).
+    // Read PieSocket host and api key from URL params when provided (preferred)
+    const params = new URLSearchParams(window.location.search);
+    const piesocketHost = params.get('piesocketHost') || 's15819.blr1.piesocket.com';
+    // apiKey should default to the `room` (cluster) value — do not set it to the subroom.
+    const apiKey = params.get('apiKey') || params.get('api_key') || CLUSTER;
+    const wsUrl = `wss://${piesocketHost}/v3/${encodeURIComponent(SUBROOM)}?api_key=${encodeURIComponent(apiKey)}`;
     ws = new WebSocket(wsUrl);
 
     // mark socket as opened when onopen fires
