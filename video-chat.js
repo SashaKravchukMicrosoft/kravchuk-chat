@@ -476,7 +476,27 @@ async function populateDeviceLists(){
             });
             outputSelect.onchange = ()=>{ handleOutputChange(); outputSelect.classList.add('hidden'); };
         }
-    }catch(e){ console.error('enumerateDevices failed', e); }
+        // After updating device lists, ensure visibility of toggles/selects
+        updateDropdownVisibility();
+    }catch(e){ console.error('enumerateDevices failed', e); updateDropdownVisibility(); }
+}
+
+// Hide dropdowns and their thumbnails when a dropdown has no options.
+function updateDropdownVisibility(){
+    try{
+        if(micSelect){
+            if(micSelect.options.length < 2){ micSelect.classList.add('hidden'); if(micToggle) micToggle.classList.add('hidden'); }
+            else { if(micToggle) micToggle.classList.remove('hidden'); micSelect.classList.add('hidden'); }
+        }
+        if(outputSelect){
+            if(outputSelect.options.length < 2){ outputSelect.classList.add('hidden'); if(outputToggle) outputToggle.classList.add('hidden'); }
+            else { if(outputToggle) outputToggle.classList.remove('hidden'); outputSelect.classList.add('hidden'); }
+        }
+        if(roomSelect){
+            if(roomSelect.options.length < 2){ roomSelect.classList.add('hidden'); if(roomThumb) roomThumb.classList.add('hidden'); }
+            else { if(roomThumb) roomThumb.classList.remove('hidden'); roomSelect.classList.add('hidden'); }
+        }
+    }catch(e){ console.error('updateDropdownVisibility failed', e); }
 }
 
 // mic toggle shows/hides compact mic select
@@ -633,6 +653,8 @@ function populateRoomSelector(){
         stopJoinPing();
         restartChat();
     };
+    // Ensure thumbnails/selects are visible/hidden based on available options
+    updateDropdownVisibility();
 }
 
 async function startChat(){
@@ -659,7 +681,22 @@ async function startChat(){
     };
 
     ws.onmessage = async e=>{
-        const data = JSON.parse(e.data);
+        let data;
+        try{
+            data = JSON.parse(e.data);
+        }catch(err){
+            console.warn('ws message parse failed', err);
+            return;
+        }
+
+        // If the signaling server returns an error payload, stop JOIN pings
+        // and surface the error to the user (e.g. {"error":"Unknown api key"}).
+        if(data && data.error){
+            stopJoinPing();
+            log('Ошибка WSS сервера: ' + data.error);
+            return;
+        }
+
         if(data.room!==getCompositeRoom()) return;
         if(data.clientId === CLIENT_ID) return; // ignore our own messages
 

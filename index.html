@@ -10,6 +10,8 @@
 <meta http-equiv="Expires" content="0" />
 <style>
 body{margin:0;font-family:sans-serif;background:#111;color:#fff;text-align:center;}
+/* Generic hidden helper used by JS to hide controls */
+.hidden{display:none !important}
 video{width:100vw;height:100vh;object-fit:cover;background:#000;}
 button{padding:10px 15px;font-size:16px;border-radius:6px;background:transparent;border:none;color:inherit}
 #status{position:fixed;bottom:10px;width:100%;text-align:center;font-size:14px;}
@@ -22,7 +24,7 @@ button{padding:10px 15px;font-size:16px;border-radius:6px;background:transparent
 #micSelect{min-width:180px}
 #outputSelect{min-width:160px}
 /* room selector */
-#roomThumb{font-size:20px;display:inline-flex;align-items:center;justify-content:center;padding:6px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06)}
+#roomThumb{font-size:20px;display:inline-flex;align-items:center;justify-content:center;padding:6px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);cursor: pointer;}
 #roomSelect{background:rgba(0,0,0,0.6);color:#fff;border:1px solid rgba(255,255,255,0.12);padding:6px;border-radius:6px;min-width:160px}
 </style>
 </head>
