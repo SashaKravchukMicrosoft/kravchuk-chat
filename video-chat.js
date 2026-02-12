@@ -340,21 +340,14 @@ function createLocalMini(){
         touchAction: 'none',
         objectFit: 'cover'
     });
-    // Drag & click handling: distinguish drag from click
-    let dragState = { dragging: false, startX:0, startY:0, origLeft:0, origTop:0 };
+    // Drag & click handling: distinguish drag from click (robust pointer handling)
+    let dragState = { dragging: false, startX:0, startY:0, origLeft:0, origTop:0, currentPointerId: null, origOverscrollBody: undefined, origOverscrollDoc: undefined };
     localMini.addEventListener('pointerdown', (ev)=>{
-        // prevent native selection/dragging while we handle custom drag
         ev.preventDefault();
-        localMini.setPointerCapture(ev.pointerId);
+        dragState.currentPointerId = ev.pointerId;
+        try{ localMini.setPointerCapture(dragState.currentPointerId); }catch(e){}
         document.body.style.userSelect = 'none';
         document.body.style.webkitUserSelect = 'none';
-        // Prevent page overscroll/scroll-chaining while dragging on mobile
-        try{
-            dragState.origOverscrollBody = document.body.style.overscrollBehavior;
-            dragState.origOverscrollDoc = document.documentElement.style.overscrollBehavior;
-            document.body.style.overscrollBehavior = 'none';
-            document.documentElement.style.overscrollBehavior = 'none';
-        }catch(e){}
         document.documentElement.style.cursor = 'grabbing';
         localMini.style.touchAction = 'none';
         localMini.draggable = false;
@@ -370,9 +363,17 @@ function createLocalMini(){
         localMini.style.bottom = 'auto';
         localMini.style.left = rect.left + 'px';
         localMini.style.top = rect.top + 'px';
+        // prevent page overscroll/scroll-chaining while dragging on mobile
+        try{
+            dragState.origOverscrollBody = document.body.style.overscrollBehavior;
+            dragState.origOverscrollDoc = document.documentElement.style.overscrollBehavior;
+            document.body.style.overscrollBehavior = 'none';
+            document.documentElement.style.overscrollBehavior = 'none';
+        }catch(e){}
 
         function onPointerMove(e){
             if(!dragState.dragging) return;
+            if(e.pointerId !== dragState.currentPointerId) return;
             e.preventDefault();
             const dx = e.clientX - dragState.startX;
             const dy = e.clientY - dragState.startY;
@@ -380,13 +381,11 @@ function createLocalMini(){
             localMini.style.top = (dragState.origTop + dy) + 'px';
         }
 
-        function onPointerUp(e){
-            localMini.releasePointerCapture(ev.pointerId);
-            // restore selection/cursor behavior
+        function finishDrag(e){
+            try{ if(dragState.currentPointerId) localMini.releasePointerCapture(dragState.currentPointerId); }catch(e){}
             document.body.style.userSelect = '';
             document.body.style.webkitUserSelect = '';
             document.documentElement.style.cursor = '';
-            // restore overscroll behavior
             try{
                 if(dragState.origOverscrollBody !== undefined) document.body.style.overscrollBehavior = dragState.origOverscrollBody;
                 if(dragState.origOverscrollDoc !== undefined) document.documentElement.style.overscrollBehavior = dragState.origOverscrollDoc;
@@ -394,31 +393,33 @@ function createLocalMini(){
             localMini.style.touchAction = 'auto';
             dragState.dragging = false;
             document.removeEventListener('pointermove', onPointerMove);
-            document.removeEventListener('pointerup', onPointerUp);
-            // if movement was small, treat as click -> swap
+            document.removeEventListener('pointerup', finishDrag);
+            document.removeEventListener('pointercancel', finishDrag);
+
             const moved = Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY);
             if(moved < 8){
                 swapVideos();
-            } else {
-                // snap to nearest corner
-                const vw = window.innerWidth;
-                const vh = window.innerHeight;
-                const rect = localMini.getBoundingClientRect();
-                const cx = rect.left + rect.width/2;
-                const cy = rect.top + rect.height/2;
-                const left = cx < vw/2;
-                const top = cy < vh/2;
-                localMini.style.transition = 'left 0.15s, top 0.15s, right 0.15s, bottom 0.15s';
-                // snap with 12px offset
-                if(left && top){ localMini.style.left='12px'; localMini.style.top='12px'; localMini.style.right='auto'; localMini.style.bottom='auto'; }
-                else if(!left && top){ localMini.style.right='12px'; localMini.style.top='12px'; localMini.style.left='auto'; localMini.style.bottom='auto'; }
-                else if(left && !top){ localMini.style.left='12px'; localMini.style.bottom='12px'; localMini.style.top='auto'; localMini.style.right='auto'; }
-                else { localMini.style.right='12px'; localMini.style.bottom='12px'; localMini.style.top='auto'; localMini.style.left='auto'; }
+                return;
             }
+            // snap to nearest corner
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const rect = localMini.getBoundingClientRect();
+            const cx = rect.left + rect.width/2;
+            const cy = rect.top + rect.height/2;
+            const left = cx < vw/2;
+            const top = cy < vh/2;
+            localMini.style.transition = 'left 0.15s, top 0.15s, right 0.15s, bottom 0.15s';
+            // snap with 12px offset
+            if(left && top){ localMini.style.left='12px'; localMini.style.top='12px'; localMini.style.right='auto'; localMini.style.bottom='auto'; }
+            else if(!left && top){ localMini.style.right='12px'; localMini.style.top='12px'; localMini.style.left='auto'; localMini.style.bottom='auto'; }
+            else if(left && !top){ localMini.style.left='12px'; localMini.style.bottom='12px'; localMini.style.top='auto'; localMini.style.right='auto'; }
+            else { localMini.style.right='12px'; localMini.style.bottom='12px'; localMini.style.top='auto'; localMini.style.left='auto'; }
         }
 
         document.addEventListener('pointermove', onPointerMove);
-        document.addEventListener('pointerup', onPointerUp);
+        document.addEventListener('pointerup', finishDrag);
+        document.addEventListener('pointercancel', finishDrag);
     });
     document.body.appendChild(localMini);
     // hide switchCamBtn on desktop
