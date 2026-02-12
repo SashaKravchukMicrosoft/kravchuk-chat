@@ -330,7 +330,7 @@ function createLocalMini(){
         position: 'fixed',
         width: '180px',
         height: '135px',
-        bottom: '12px',
+        top: '12px',
         right: '12px',
         zIndex: 9999,
         border: '2px solid #222',
