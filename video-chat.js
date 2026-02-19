@@ -1,10 +1,79 @@
+// ===== MINIMAL INLINE MD5 (RFC 1321) =====
+function md5(str){
+    function safeAdd(x,y){const lsw=(x&0xffff)+(y&0xffff);return(((x>>16)+(y>>16)+(lsw>>16))<<16)|(lsw&0xffff);}
+    function bitRotl(num,cnt){return(num<<cnt)|(num>>>(32-cnt));}
+    function md5cmn(q,a,b,x,s,t){return safeAdd(bitRotl(safeAdd(safeAdd(a,q),safeAdd(x,t)),s),b);}
+    function md5ff(a,b,c,d,x,s,t){return md5cmn((b&c)|((~b)&d),a,b,x,s,t);}
+    function md5gg(a,b,c,d,x,s,t){return md5cmn((b&d)|(c&(~d)),a,b,x,s,t);}
+    function md5hh(a,b,c,d,x,s,t){return md5cmn(b^c^d,a,b,x,s,t);}
+    function md5ii(a,b,c,d,x,s,t){return md5cmn(c^(b|(~d)),a,b,x,s,t);}
+    function str2blks(str){
+        const nblk=((str.length+8)>>6)+1,blks=new Array(nblk*16).fill(0);
+        for(let i=0;i<str.length;i++)blks[i>>2]|=str.charCodeAt(i)<<((i%4)*8);
+        blks[str.length>>2]|=0x80<<((str.length%4)*8);
+        blks[nblk*16-2]=str.length*8;
+        return blks;
+    }
+    const x=str2blks(unescape(encodeURIComponent(str)));
+    let a=0x67452301,b=0xefcdab89,c=0x98badcfe,d=0x10325476;
+    for(let i=0;i<x.length;i+=16){
+        const [oa,ob,oc,od]=[a,b,c,d];
+        a=md5ff(a,b,c,d,x[i+0],7,-680876936);b=md5ff(d,a,b,c,x[i+1],12,-389564586);
+        c=md5ff(c,d,a,b,x[i+2],17,606105819);d=md5ff(b,c,d,a,x[i+3],22,-1044525330);
+        a=md5ff(a,b,c,d,x[i+4],7,-176418897);b=md5ff(d,a,b,c,x[i+5],12,1200080426);
+        c=md5ff(c,d,a,b,x[i+6],17,-1473231341);d=md5ff(b,c,d,a,x[i+7],22,-45705983);
+        a=md5ff(a,b,c,d,x[i+8],7,1770035416);b=md5ff(d,a,b,c,x[i+9],12,-1958414417);
+        c=md5ff(c,d,a,b,x[i+10],17,-42063);d=md5ff(b,c,d,a,x[i+11],22,-1990404162);
+        a=md5ff(a,b,c,d,x[i+12],7,1804603682);b=md5ff(d,a,b,c,x[i+13],12,-40341101);
+        c=md5ff(c,d,a,b,x[i+14],17,-1502002290);d=md5ff(b,c,d,a,x[i+15],22,1236535329);
+        a=md5gg(a,b,c,d,x[i+1],5,-165796510);b=md5gg(d,a,b,c,x[i+6],9,-1069501632);
+        c=md5gg(c,d,a,b,x[i+11],14,643717713);d=md5gg(b,c,d,a,x[i+0],20,-373897302);
+        a=md5gg(a,b,c,d,x[i+5],5,-701558691);b=md5gg(d,a,b,c,x[i+10],9,38016083);
+        c=md5gg(c,d,a,b,x[i+15],14,-660478335);d=md5gg(b,c,d,a,x[i+4],20,-405537848);
+        a=md5gg(a,b,c,d,x[i+9],5,568446438);b=md5gg(d,a,b,c,x[i+14],9,-1019803690);
+        c=md5gg(c,d,a,b,x[i+3],14,-187363961);d=md5gg(b,c,d,a,x[i+8],20,1163531501);
+        a=md5gg(a,b,c,d,x[i+13],5,-1444681467);b=md5gg(d,a,b,c,x[i+2],9,-51403784);
+        c=md5gg(c,d,a,b,x[i+7],14,1735328473);d=md5gg(b,c,d,a,x[i+12],20,-1926607734);
+        a=md5hh(a,b,c,d,x[i+5],4,-378558);b=md5hh(d,a,b,c,x[i+8],11,-2022574463);
+        c=md5hh(c,d,a,b,x[i+11],16,1839030562);d=md5hh(b,c,d,a,x[i+14],23,-35309556);
+        a=md5hh(a,b,c,d,x[i+1],4,-1530992060);b=md5hh(d,a,b,c,x[i+4],11,1272893353);
+        c=md5hh(c,d,a,b,x[i+7],16,-155497632);d=md5hh(b,c,d,a,x[i+10],23,-1094730640);
+        a=md5hh(a,b,c,d,x[i+13],4,681279174);b=md5hh(d,a,b,c,x[i+0],11,-358537222);
+        c=md5hh(c,d,a,b,x[i+3],16,-722521979);d=md5hh(b,c,d,a,x[i+6],23,76029189);
+        a=md5hh(a,b,c,d,x[i+9],4,-640364487);b=md5hh(d,a,b,c,x[i+12],11,-421815835);
+        c=md5hh(c,d,a,b,x[i+15],16,530742520);d=md5hh(b,c,d,a,x[i+2],23,-995338651);
+        a=md5ii(a,b,c,d,x[i+0],6,-198630844);b=md5ii(d,a,b,c,x[i+7],10,1126891415);
+        c=md5ii(c,d,a,b,x[i+14],15,-1416354905);d=md5ii(b,c,d,a,x[i+5],21,-57434055);
+        a=md5ii(a,b,c,d,x[i+12],6,1700485571);b=md5ii(d,a,b,c,x[i+3],10,-1894986606);
+        c=md5ii(c,d,a,b,x[i+10],15,-1051523);d=md5ii(b,c,d,a,x[i+1],21,-2054922799);
+        a=md5ii(a,b,c,d,x[i+8],6,1873313359);b=md5ii(d,a,b,c,x[i+15],10,-30611744);
+        c=md5ii(c,d,a,b,x[i+6],15,-1560198380);d=md5ii(b,c,d,a,x[i+13],21,1309151649);
+        a=md5ii(a,b,c,d,x[i+4],6,-145523070);b=md5ii(d,a,b,c,x[i+11],10,-1120210379);
+        c=md5ii(c,d,a,b,x[i+2],15,718787259);d=md5ii(b,c,d,a,x[i+9],21,-343485551);
+        a=safeAdd(a,oa);b=safeAdd(b,ob);c=safeAdd(c,oc);d=safeAdd(d,od);
+    }
+    return[a,b,c,d].map(n=>(n>>>0).toString(16).padStart(8,'0').match(/../g).map(x=>x[1]+x[0]).join('')).join('');
+}
+
 let pc, localStream, ws, usingFrontCamera = true;
 const CLIENT_ID = Math.random().toString(36).substring(2,9);
 let hasSentOffer = false;
 let joinInterval = null;
 let EXPECTED_WS_CLOSE = false; // when true, suppress normal ws close log
 let WS_WAS_OPEN = false; // true if ws.onopen has fired for current socket
+let reconnectAttempts = 0;
+const MAX_RECONNECT = 3;
 const isMobile = (('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.innerWidth < 768);
+
+// ===== INCOMING CALL NOTIFICATION GLOBALS =====
+let notifWs = null;
+let notifWsReconnectTimer = null;
+let notifWsReconnectAttempts = 0;
+let notifWsHeartbeat = null;
+const MAX_NOTIF_RECONNECT_DELAY = 30000;
+let activeIncomingCall = null; // { callSignature, callerNumber, callerAlias, subroom, cluster }
+const seenCallSignatures = new Set();
+let activeNotification = null;
 let localMini = null;
 let isSwapped = false;
 const remoteVideo = document.getElementById('remoteVideo');
@@ -19,6 +88,27 @@ const refreshBtn = document.getElementById('refreshBtn');
 
 const roomSelect = document.getElementById('roomSelect');
 const roomThumb = document.getElementById('roomThumb');
+
+// ===== PHONE / STATE MACHINE GLOBALS =====
+let APP_STATE = 'setup';
+let dialedNumber = '';
+const setupScreen        = document.getElementById('setupScreen');
+const dialpadScreen      = document.getElementById('dialpadScreen');
+const myPhoneInput       = document.getElementById('myPhoneInput');
+const setupSubmitBtn     = document.getElementById('setupSubmitBtn');
+const dialDisplayText    = document.getElementById('dialDisplayText');
+const dialpadMyNum       = document.getElementById('dialpadMyNum');
+const contactPickerBtn   = document.getElementById('contactPickerBtn');
+const callBtn            = document.getElementById('callBtn');
+const backspaceBtn       = document.getElementById('backspaceBtn');
+const historyShortcutBtn = document.getElementById('historyShortcutBtn');
+const burgerBtn          = document.getElementById('burgerBtn');
+const burgerPanel        = document.getElementById('burgerPanel');
+const burgerOverlay      = document.getElementById('burgerOverlay');
+const burgerClose        = document.getElementById('burgerClose');
+const panelMyNum         = document.getElementById('panelMyNum');
+const callHistoryList    = document.getElementById('callHistoryList');
+const changeNumberBtn    = document.getElementById('changeNumberBtn');
 // Hide switch button on desktop immediately
 try{ if(!isMobile && switchCamBtn) switchCamBtn.style.display = 'none'; }catch(e){}
 // Hidden audio element to always play remote audio (prevents losing sound when swapping video elements)
@@ -308,10 +398,18 @@ function initPeer(){
     localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
     
     pc.onconnectionstatechange = ()=>{
-        if(pc.connectionState==='disconnected' || pc.connectionState==='failed'){
-            log("Собеседник отключился, перезапуск...");
-            restartChat();
+        if((pc.connectionState==='disconnected' || pc.connectionState==='failed') && APP_STATE==='incall'){
+            reconnectAttempts++;
+            if(reconnectAttempts <= MAX_RECONNECT){
+                log(`Собеседник отключился, перезапуск ${reconnectAttempts}/${MAX_RECONNECT}...`);
+                restartChat();
+            } else {
+                log("Соединение потеряно.");
+                reconnectAttempts = 0;
+                setState('dialing');
+            }
         } else if(pc.connectionState==='connected'){
+            reconnectAttempts = 0;
             log("Соединение установлено!");
             stopJoinPing();
         }
@@ -330,7 +428,7 @@ function createLocalMini(){
         position: 'fixed',
         width: '180px',
         height: '135px',
-        top: '12px',
+        bottom: '12px',
         right: '12px',
         zIndex: 9999,
         border: '2px solid #222',
@@ -377,8 +475,19 @@ function createLocalMini(){
             e.preventDefault();
             const dx = e.clientX - dragState.startX;
             const dy = e.clientY - dragState.startY;
-            localMini.style.left = (dragState.origLeft + dx) + 'px';
-            localMini.style.top = (dragState.origTop + dy) + 'px';
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const w = localMini.offsetWidth  || 180;
+            const h = localMini.offsetHeight || 135;
+            let newLeft = dragState.origLeft + dx;
+            let newTop  = dragState.origTop  + dy;
+            // Clamp within viewport
+            newLeft = Math.max(0, Math.min(newLeft, vw - w));
+            newTop  = Math.max(0, Math.min(newTop,  vh - h));
+            // Protect burger button (top-right, ~60px tall × ~55px wide from right edge)
+            if(newLeft + w > vw - 55) newTop = Math.max(newTop, 60);
+            localMini.style.left = newLeft + 'px';
+            localMini.style.top  = newTop  + 'px';
         }
 
         function finishDrag(e){
@@ -410,9 +519,9 @@ function createLocalMini(){
             const left = cx < vw/2;
             const top = cy < vh/2;
             localMini.style.transition = 'left 0.15s, top 0.15s, right 0.15s, bottom 0.15s';
-            // snap with 12px offset
+            // snap with 12px offset; top-right pushed down 60px to clear burger button
             if(left && top){ localMini.style.left='12px'; localMini.style.top='12px'; localMini.style.right='auto'; localMini.style.bottom='auto'; }
-            else if(!left && top){ localMini.style.right='12px'; localMini.style.top='12px'; localMini.style.left='auto'; localMini.style.bottom='auto'; }
+            else if(!left && top){ localMini.style.right='12px'; localMini.style.top='60px'; localMini.style.left='auto'; localMini.style.bottom='auto'; }
             else if(left && !top){ localMini.style.left='12px'; localMini.style.bottom='12px'; localMini.style.top='auto'; localMini.style.right='auto'; }
             else { localMini.style.right='12px'; localMini.style.bottom='12px'; localMini.style.top='auto'; localMini.style.left='auto'; }
         }
@@ -564,14 +673,7 @@ async function hangupCall(){
 }
 
 if(hangupBtn){
-    hangupBtn.onclick = (ev)=>{
-        if(pc && pc.connectionState==='connected'){
-            hangupCall();
-        } else {
-            // if not connected, act as a nop or give feedback
-            log('Нет активного соединения');
-        }
-    };
+    hangupBtn.onclick = ()=>setState('dialing');
 }
 
 if(refreshBtn){
@@ -811,12 +913,455 @@ async function restartChat(){
     }catch(e){ log("Ошибка при перезапуске"); }
 }
 
+// ===== PHONE SYSTEM: SUBROOM COMPUTATION =====
+function computeSubroom(myNumber, theirNumber){
+    const normalize = n => n.replace(/\D/g,'');
+    const arr = [normalize(myNumber), normalize(theirNumber)].sort();
+    return md5(arr.join(':'));
+}
+
+function generateCallSignature(){
+    if(typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'){
+        return crypto.randomUUID();
+    }
+    return Date.now().toString(36) + '-' + Math.random().toString(36).substring(2,11);
+}
+
+function getPersonalChannelUrl(number){
+    const p = new URLSearchParams(window.location.search);
+    const host = p.get('piesocketHost') || 's15819.blr1.piesocket.com';
+    const apiKey = p.get('apiKey') || p.get('api_key') || CLUSTER;
+    return `wss://${host}/v3/${normalizePhone(number).replace(/\D/g,'')}?api_key=${encodeURIComponent(apiKey)}`;
+}
+
+// ===== PHONE NUMBER NORMALIZATION =====
+function normalizePhone(n){
+    const s = String(n).trim();
+    const plus = s.startsWith('+') ? '+' : '';
+    return plus + s.replace(/\D/g,'');
+}
+
+// ===== CALLS HISTORY (localStorage) =====
+function loadCallsHistory(){
+    try{ return JSON.parse(localStorage.getItem('callsHistory')||'[]'); }catch(e){ return []; }
+}
+function saveCallToHistory(number){
+    const h = loadCallsHistory();
+    const n = normalizePhone(number);
+    // carry over existing alias for this number if already named
+    const existing = h.find(e=>normalizePhone(e.number)===n && e.alias);
+    h.unshift({number:n, alias:existing?existing.alias:'', timestamp:Date.now()});
+    localStorage.setItem('callsHistory', JSON.stringify(h));
+}
+function updateCallAlias(targetNumber, alias){
+    const h = loadCallsHistory();
+    const norm = normalizePhone(targetNumber);
+    h.forEach(e=>{ if(normalizePhone(e.number)===norm) e.alias=alias; });
+    localStorage.setItem('callsHistory', JSON.stringify(h));
+}
+function removeCallFromHistory(idx){
+    const h = loadCallsHistory();
+    h.splice(idx,1);
+    localStorage.setItem('callsHistory', JSON.stringify(h));
+}
+
+// ===== TEARDOWN WITHOUT RESTART =====
+function hangupAndStopStreams(){
+    try{
+        hasSentOffer = false;
+        stopJoinPing();
+        if(ws){ EXPECTED_WS_CLOSE=true; try{ws.close();}catch(e){} ws=null; }
+        if(pc){ try{pc.close();}catch(e){} pc=null; }
+        if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+        if(localMini){ localMini.remove(); localMini=null; }
+        isSwapped=false;
+    }catch(e){ console.error('hangupAndStopStreams failed',e); }
+}
+
+// ===== PERSONAL NOTIFICATION CHANNEL =====
+function connectPersonalChannel(){
+    const myNumber = localStorage.getItem('myPhoneNumber');
+    if(!myNumber) return;
+    if(notifWs && (notifWs.readyState === WebSocket.OPEN || notifWs.readyState === WebSocket.CONNECTING)){
+        return; // already alive, nothing to do
+    }
+    if(notifWs && notifWs.readyState !== WebSocket.CLOSED){
+        try{ notifWs.close(); }catch(e){}
+    }
+    const url = getPersonalChannelUrl(myNumber);
+    notifWs = new WebSocket(url);
+    notifWs.onopen = () => {
+        notifWsReconnectAttempts = 0;
+        console.log('[notif] Personal channel connected:', url);
+        notifWsHeartbeat = setInterval(() => {
+            if(notifWs && notifWs.readyState === WebSocket.OPEN){
+                try{ notifWs.send(JSON.stringify({type:'ping'})); }catch(e){}
+            }
+        }, 20000);
+    };
+    notifWs.onmessage = (e) => {
+        let data;
+        try{ data = JSON.parse(e.data); }catch(err){ return; }
+        if(!data || data.type !== 'incoming_call') return;
+        const { callSignature, callerNumber, callerAlias, subroom, cluster, timestamp } = data;
+        if(!callSignature) return;
+        if(timestamp && Date.now() - timestamp > 60000) return;
+        if(seenCallSignatures.has(callSignature)) return;
+        if(APP_STATE === 'incall'){ seenCallSignatures.add(callSignature); return; }
+        if(activeIncomingCall && activeIncomingCall.callSignature === callSignature) return;
+        activeIncomingCall = { callSignature, callerNumber, callerAlias, subroom, cluster };
+        showIncomingCallDialog(callSignature, callerNumber, callerAlias, subroom, cluster);
+        if(document.visibilityState !== 'visible'){
+            showBrowserNotification(callerAlias || callerNumber, callerNumber);
+        }
+    };
+    notifWs.onerror = (e) => { console.warn('[notif] Personal channel error', e); };
+    notifWs.onclose = () => {
+        clearInterval(notifWsHeartbeat); notifWsHeartbeat = null;
+        console.log('[notif] Personal channel closed');
+        if(APP_STATE === 'dialing' || APP_STATE === 'incall') scheduleNotifReconnect();
+    };
+}
+
+function disconnectPersonalChannel(){
+    if(notifWsReconnectTimer){ clearTimeout(notifWsReconnectTimer); notifWsReconnectTimer = null; }
+    clearInterval(notifWsHeartbeat); notifWsHeartbeat = null;
+    notifWsReconnectAttempts = 0;
+    if(notifWs){ try{ notifWs.close(); }catch(e){} notifWs = null; }
+}
+
+function scheduleNotifReconnect(){
+    if(notifWsReconnectTimer) return;
+    const delay = Math.min(1000 * Math.pow(2, notifWsReconnectAttempts), MAX_NOTIF_RECONNECT_DELAY);
+    const jitter = Math.random() * 1000;
+    notifWsReconnectAttempts++;
+    console.log(`[notif] Reconnecting in ${Math.round(delay+jitter)}ms (attempt ${notifWsReconnectAttempts})`);
+    notifWsReconnectTimer = setTimeout(() => { notifWsReconnectTimer = null; connectPersonalChannel(); }, delay + jitter);
+}
+
+// ===== STATE MACHINE =====
+function setState(newState){
+    APP_STATE = newState;
+    // Notification channel lifecycle
+    hideIncomingCallDialog();
+    if(newState === 'setup') disconnectPersonalChannel();
+    if(newState === 'dialing'){ requestNotificationPermission(); connectPersonalChannel(); }
+    // (incall: keep notifWs alive so callee receives further calls)
+    const isSetup   = newState==='setup';
+    const isDialing = newState==='dialing';
+    const isIncall  = newState==='incall';
+
+    if(setupScreen)   setupScreen.classList.toggle('hidden',   !isSetup);
+    if(dialpadScreen) dialpadScreen.classList.toggle('hidden', !isDialing);
+    if(remoteVideo)   remoteVideo.classList.toggle('hidden',   !isIncall);
+    const ctrlEl = document.getElementById('controls');
+    if(ctrlEl)      ctrlEl.classList.toggle('hidden',          !isIncall);
+    if(statusText)  statusText.classList.toggle('hidden',      !isIncall);
+    if(burgerBtn)   burgerBtn.classList.toggle('hidden',       isSetup);
+    // always suppress animal room selector
+    if(roomThumb)  roomThumb.classList.add('hidden');
+    if(roomSelect) roomSelect.classList.add('hidden');
+
+    if(isSetup){
+        const existing = localStorage.getItem('myPhoneNumber');
+        if(existing && myPhoneInput) myPhoneInput.value = existing;
+        setTimeout(()=>{ if(myPhoneInput) myPhoneInput.focus(); },100);
+    }
+    if(isDialing){
+        if(dialpadMyNum) dialpadMyNum.textContent = localStorage.getItem('myPhoneNumber')||'';
+        dialedNumber = '';
+        updateDialDisplay();
+        hangupAndStopStreams();
+    }
+    if(isIncall){
+        reconnectAttempts = 0;
+        populateDeviceLists().then(()=>startChat()).catch(()=>startChat());
+    }
+}
+
+// ===== DIAL DISPLAY =====
+function updateDialDisplay(){
+    if(dialDisplayText) dialDisplayText.textContent = dialedNumber;
+}
+
+// ===== OUTGOING CALL NOTIFICATION =====
+function sendCallNotification(callerNumber, calleeNumber, subroom, cluster, callSignature){
+    const url = getPersonalChannelUrl(calleeNumber);
+    const tempWs = new WebSocket(url);
+    const history = loadCallsHistory();
+    const entry = history.find(e => normalizePhone(e.number) === normalizePhone(callerNumber));
+    const callerAlias = (entry && entry.alias) ? entry.alias : '';
+    const msg = JSON.stringify({
+        type: 'incoming_call',
+        callSignature,
+        callerNumber: normalizePhone(callerNumber),
+        callerAlias,
+        subroom,
+        cluster,
+        timestamp: Date.now()
+    });
+    let sent = false;
+    tempWs.onopen = () => {
+        try{ tempWs.send(msg); sent = true; console.log('[notif] Call notification sent to', normalizePhone(calleeNumber)); }
+        catch(e){ console.warn('[notif] Failed to send notification', e); }
+        setTimeout(() => { try{ tempWs.close(); }catch(e){} }, 5000);
+    };
+    tempWs.onerror = (e) => { console.warn('[notif] Notification socket error', e); };
+    tempWs.onclose = () => { if(!sent) console.warn('[notif] Notification socket closed before message sent'); };
+}
+
+// ===== INITIATE CALL =====
+function initiateCall(){
+    const d = dialedNumber.trim();
+    if(!d){ log('Введите номер для звонка'); return; }
+    const myNum = localStorage.getItem('myPhoneNumber');
+    if(!myNum){ setState('setup'); return; }
+    SUBROOM = computeSubroom(myNum, d);
+    const u = new URL(window.location.href);
+    u.searchParams.set('subroom', SUBROOM);
+    window.history.replaceState(null,null,u.toString());
+    const callSignature = generateCallSignature();
+    sendCallNotification(myNum, d, SUBROOM, CLUSTER, callSignature);
+    saveCallToHistory(d);
+    setState('incall');
+}
+
+// ===== SETUP SCREEN HANDLERS =====
+function setupScreenHandlers(){
+    function submitPhoneSetup(){
+        const val = myPhoneInput ? myPhoneInput.value.trim() : '';
+        if(!val){
+            if(myPhoneInput) myPhoneInput.style.borderColor='#e53935';
+            return;
+        }
+        localStorage.setItem('myPhoneNumber', val);
+        setState('dialing');
+    }
+    if(setupSubmitBtn) setupSubmitBtn.addEventListener('click', submitPhoneSetup);
+    if(myPhoneInput) myPhoneInput.addEventListener('keydown', e=>{ if(e.key==='Enter') submitPhoneSetup(); });
+}
+
+// ===== DIAL PAD HANDLERS =====
+function initDialPad(){
+    let zeroLongPressed = false;
+
+    document.querySelectorAll('.dial-key').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+            if(btn.dataset.digit==='0' && zeroLongPressed){ zeroLongPressed=false; return; }
+            dialedNumber += btn.dataset.digit;
+            updateDialDisplay();
+        });
+    });
+
+    // Long-press "0" inserts "+" (like real phones)
+    const zeroBtn = document.querySelector('.dial-key[data-digit="0"]');
+    if(zeroBtn){
+        let zeroTimer;
+        zeroBtn.addEventListener('pointerdown',()=>{
+            zeroTimer = setTimeout(()=>{
+                zeroLongPressed = true;
+                dialedNumber += '+';
+                updateDialDisplay();
+            }, 500);
+        });
+        zeroBtn.addEventListener('pointerup',  ()=>clearTimeout(zeroTimer));
+        zeroBtn.addEventListener('pointercancel',()=>{ clearTimeout(zeroTimer); zeroLongPressed=false; });
+    }
+    if(backspaceBtn){
+        backspaceBtn.addEventListener('click',()=>{ dialedNumber=dialedNumber.slice(0,-1); updateDialDisplay(); });
+        let clearTimer;
+        backspaceBtn.addEventListener('pointerdown',()=>{ clearTimer=setTimeout(()=>{ dialedNumber=''; updateDialDisplay(); },600); });
+        backspaceBtn.addEventListener('pointerup',()=>clearTimeout(clearTimer));
+        backspaceBtn.addEventListener('pointercancel',()=>clearTimeout(clearTimer));
+    }
+    if(callBtn) callBtn.addEventListener('click', initiateCall);
+    if(historyShortcutBtn) historyShortcutBtn.addEventListener('click', openBurgerPanel);
+
+    // Keyboard input (desktop) — only active while on dial pad
+    document.addEventListener('keydown', e=>{
+        if(APP_STATE !== 'dialing') return;
+        if(burgerPanel && burgerPanel.classList.contains('open')) return;
+        const key = e.key;
+        if(/^[\d*#+]$/.test(key)){
+            e.preventDefault();
+            dialedNumber += key;
+            updateDialDisplay();
+        } else if(key==='Backspace'){
+            e.preventDefault();
+            dialedNumber = dialedNumber.slice(0,-1);
+            updateDialDisplay();
+        } else if(key==='Delete'){
+            e.preventDefault();
+            dialedNumber = '';
+            updateDialDisplay();
+        } else if(key==='Enter'){
+            e.preventDefault();
+            initiateCall();
+        }
+    });
+}
+
+// ===== CONTACT PICKER API =====
+function initContactPicker(){
+    if('contacts' in navigator && 'ContactsManager' in window){
+        if(contactPickerBtn) contactPickerBtn.classList.remove('hidden');
+        if(contactPickerBtn) contactPickerBtn.addEventListener('click', async()=>{
+            try{
+                const results = await navigator.contacts.select(['tel'],{multiple:false});
+                if(results && results.length>0){
+                    const tels = results[0].tel;
+                    if(tels && tels.length>0){ dialedNumber=tels[0]; updateDialDisplay(); }
+                }
+            }catch(e){ console.warn('Contact picker dismissed',e); }
+        });
+    }
+}
+
+// ===== INCOMING CALL DIALOG =====
+function requestNotificationPermission(){
+    if(!('Notification' in window)) return;
+    if(Notification.permission === 'default'){
+        Notification.requestPermission().catch(()=>{});
+    }
+}
+
+function showBrowserNotification(displayName, callerNumber){
+    if(!('Notification' in window) || Notification.permission !== 'granted') return;
+    try{
+        if(activeNotification){ activeNotification.close(); activeNotification = null; }
+        const body = (displayName !== callerNumber && displayName)
+            ? `${displayName} (${normalizePhone(callerNumber)})`
+            : normalizePhone(callerNumber);
+        activeNotification = new Notification('Входящий звонок', {
+            body,
+            tag: 'incoming-call',
+            requireInteraction: true
+        });
+        activeNotification.onclick = () => {
+            window.focus();
+            if(activeNotification){ activeNotification.close(); activeNotification = null; }
+        };
+    }catch(e){ console.warn('[notif] Browser Notification failed', e); }
+}
+
+function showIncomingCallDialog(callSignature, callerNumber, callerAlias, subroom, cluster){
+    const overlay    = document.getElementById('incomingCallOverlay');
+    const nameEl     = document.getElementById('incomingCallerName');
+    const numEl      = document.getElementById('incomingCallerNumber');
+    const acceptBtn  = document.getElementById('acceptCallBtn');
+    const declineBtn = document.getElementById('declineCallBtn');
+    const history = loadCallsHistory();
+    const localEntry = history.find(e => normalizePhone(e.number) === normalizePhone(callerNumber));
+    const displayName = (localEntry && localEntry.alias) || callerAlias || normalizePhone(callerNumber);
+    if(nameEl)  nameEl.textContent  = displayName;
+    if(numEl)   numEl.textContent   = normalizePhone(callerNumber);
+    if(acceptBtn)  acceptBtn.onclick  = () => onAcceptCall(subroom, cluster, callSignature);
+    if(declineBtn) declineBtn.onclick = () => onDeclineCall(callSignature);
+    if(overlay) overlay.classList.remove('hidden');
+}
+
+function hideIncomingCallDialog(){
+    const overlay = document.getElementById('incomingCallOverlay');
+    if(overlay) overlay.classList.add('hidden');
+    activeIncomingCall = null;
+    if(activeNotification){ activeNotification.close(); activeNotification = null; }
+}
+
+function onAcceptCall(subroom, cluster, callSignature){
+    seenCallSignatures.add(callSignature);
+    hideIncomingCallDialog();
+    SUBROOM = subroom;
+    CLUSTER = cluster;
+    const u = new URL(window.location.href);
+    u.searchParams.set('subroom', SUBROOM);
+    window.history.replaceState(null,null,u.toString());
+    setState('incall');
+}
+
+function onDeclineCall(callSignature){
+    seenCallSignatures.add(callSignature);
+    hideIncomingCallDialog();
+}
+
+// ===== BURGER MENU =====
+function openBurgerPanel(){
+    renderCallHistory();
+    if(panelMyNum) panelMyNum.textContent = localStorage.getItem('myPhoneNumber')||'';
+    if(burgerPanel) burgerPanel.classList.add('open');
+    if(burgerOverlay) burgerOverlay.classList.remove('hidden');
+}
+function closeBurgerPanel(){
+    if(burgerPanel) burgerPanel.classList.remove('open');
+    if(burgerOverlay) burgerOverlay.classList.add('hidden');
+}
+function renderCallHistory(){
+    if(!callHistoryList) return;
+    const history = loadCallsHistory();
+    callHistoryList.innerHTML = '';
+    if(history.length===0){
+        callHistoryList.innerHTML='<p style="padding:16px 8px;color:#666">Нет истории звонков</p>';
+        return;
+    }
+    history.forEach((entry,idx)=>{
+        const el = document.createElement('div');
+        el.className='history-entry';
+        const displayName = entry.alias || normalizePhone(entry.number);
+        const date = new Date(entry.timestamp).toLocaleString('ru');
+        el.innerHTML=`
+          <div class="history-info">
+            <span class="history-name" data-idx="${idx}">${displayName}</span>
+            <span class="history-date">${date}</span>
+          </div>
+          <button class="history-call-btn" title="Позвонить">📞</button>
+          <button class="history-del-btn" title="Удалить">✕</button>`;
+        el.querySelector('.history-name').addEventListener('click',()=>startAliasEdit(idx));
+        el.querySelector('.history-call-btn').addEventListener('click',()=>{
+            closeBurgerPanel();
+            dialedNumber = entry.number;
+            initiateCall();
+        });
+        el.querySelector('.history-del-btn').addEventListener('click',()=>{
+            removeCallFromHistory(idx);
+            renderCallHistory();
+        });
+        callHistoryList.appendChild(el);
+    });
+}
+function startAliasEdit(idx){
+    const history = loadCallsHistory();
+    const entry = history[idx];
+    const nameEl = callHistoryList.querySelector(`.history-name[data-idx="${idx}"]`);
+    if(!nameEl) return;
+    const input = document.createElement('input');
+    input.type='text'; input.value=entry.alias||''; input.placeholder=normalizePhone(entry.number);
+    Object.assign(input.style,{background:'#333',color:'#fff',border:'1px solid #555',
+        borderRadius:'4px',padding:'4px 8px',width:'100%',boxSizing:'border-box',fontSize:'15px'});
+    nameEl.replaceWith(input);
+    input.focus();
+    const persist=()=>{ updateCallAlias(entry.number, input.value.trim()); renderCallHistory(); };
+    input.addEventListener('blur',persist);
+    input.addEventListener('keydown',e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ input.removeEventListener('blur',persist); renderCallHistory(); } });
+}
+function initBurgerMenu(){
+    if(burgerBtn) burgerBtn.addEventListener('click', openBurgerPanel);
+    if(burgerClose) burgerClose.addEventListener('click', closeBurgerPanel);
+    if(burgerOverlay) burgerOverlay.addEventListener('click', closeBurgerPanel);
+    if(changeNumberBtn) changeNumberBtn.addEventListener('click',()=>{ closeBurgerPanel(); setState('setup'); });
+}
+
+// ===== APP ENTRY POINT =====
+function initApp(){
+    initContactPicker();
+    setupScreenHandlers();
+    initDialPad();
+    initBurgerMenu();
+    const phone = localStorage.getItem('myPhoneNumber');
+    setState(phone ? 'dialing' : 'setup');
+}
+
 // Инициализация: cluster (unique link) + subroom selection
-const CLUSTER = getRoomFromURL();
+let CLUSTER = getRoomFromURL();
 let SUBROOM = getSubroomFromURL();
 
-// populate device lists and room selector first, then start chat
-populateDeviceLists().then(()=>{
-    populateRoomSelector();
-    startChat();
-}).catch(()=>{ populateRoomSelector(); startChat(); });
+// ===== START THE APP =====
+initApp();
