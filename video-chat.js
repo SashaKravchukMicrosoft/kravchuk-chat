@@ -23,7 +23,33 @@
     Sentry.captureException(event.reason);
   };
 
-  
+// helper: create WebSocket and attach Sentry breadcrumbs/handlers
+function createLoggedWebSocket(url, tag){
+    try{
+        const ws = new WebSocket(url);
+        try{ Sentry.addBreadcrumb({ category: 'ws', message: `create ${tag} ${url}`, level: 'info' }); }catch(e){}
+        ws.addEventListener('open', ()=>{ try{ Sentry.addBreadcrumb({ category: 'ws', message: `open ${tag} ${url}`, level: 'info' }); }catch(e){} });
+        ws.addEventListener('error', (ev)=>{
+            try{
+                Sentry.addBreadcrumb({ category: 'ws', message: `error ${tag} ${url}`, level: 'error' });
+                Sentry.captureException(new Error(`WebSocket error (${tag}) ${url}`));
+            }catch(e){}
+        });
+        ws.addEventListener('close', (ev)=>{
+            try{
+                Sentry.addBreadcrumb({ category: 'ws', message: `close ${tag} ${url} code=${ev.code} reason=${ev.reason||''}`, level: 'warning' });
+                if(ev && ev.code && ev.code !== 1000){
+                    Sentry.captureMessage(`WebSocket closed (${tag}) ${url} code=${ev.code} reason=${ev.reason||''}`);
+                }
+            }catch(e){}
+        });
+        return ws;
+    }catch(err){
+        try{ Sentry.captureException(err); }catch(e){}
+        throw err;
+    }
+}
+
 // ===== MINIMAL INLINE MD5 (RFC 1321) =====
 function md5(str){
     function safeAdd(x,y){const lsw=(x&0xffff)+(y&0xffff);return(((x>>16)+(y>>16)+(lsw>>16))<<16)|(lsw&0xffff);}
@@ -866,7 +892,7 @@ async function startChat(){
     } else if(!CLUSTER){
         console.warn('[startChat] no room specified in URL and no CLUSTER present — proceeding without room query param');
     }
-    ws = new WebSocket(wsUrl);
+    ws = createLoggedWebSocket(wsUrl, 'signaling');
 
     // mark socket as opened when onopen fires
     ws.onopen = async ()=>{
@@ -1087,7 +1113,7 @@ function connectPersonalChannel(){
         try{ notifWs.close(); }catch(e){}
     }
     const url = getPersonalChannelUrl(myNumber);
-    notifWs = new WebSocket(url);
+    notifWs = createLoggedWebSocket(url, 'personal');
     notifWs.onopen = () => {
         console.log('[notif] Personal channel connected:', url);
         // clear any pending reconnect timer now that we opened
@@ -1248,7 +1274,7 @@ function updateDialDisplay(){
 // ===== OUTGOING CALL NOTIFICATION =====
 function sendCallNotification(callerNumber, calleeNumber, subroom, cluster, callSignature){
     const url = getPersonalChannelUrl(calleeNumber);
-    const tempWs = new WebSocket(url);
+    const tempWs = createLoggedWebSocket(url, 'outgoing');
     const history = loadCallsHistory();
     const entry = history.find(e => normalizePhone(e.number) === normalizePhone(callerNumber));
     const callerAlias = (entry && entry.alias) ? entry.alias : '';
