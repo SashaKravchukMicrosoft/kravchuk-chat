@@ -218,32 +218,6 @@ window.addEventListener('keydown', (e)=>{
 </div>
 
 <script src="https://browser.sentry-cdn.com/7.60.0/bundle.min.js" crossorigin="anonymous"></script>
-<script>
-  Sentry.init({
-    dsn: "https://a1c62d99ef214633b2852cc684b66f49@app.glitchtip.com/20613",
-
-    // отключаем трейсинг — нужен только сбор ошибок
-    tracesSampleRate: 0,
-
-    environment: "production",
-
-    beforeSend(event) {
-      return {
-        userPhone: localStorage.getItem('myPhone') || undefined,
-      };
-    }
-  });
-
-  // ловим глобальные ошибки
-  window.onerror = function (msg, url, lineNo, columnNo, error) {
-    Sentry.captureException(error || msg);
-  };
-
-  // ловим unhandled promise rejections
-  window.onunhandledrejection = function (event) {
-    Sentry.captureException(event.reason);
-  };
-</script>
 <script src="video-chat.js"></script>
 </body>
 </html>

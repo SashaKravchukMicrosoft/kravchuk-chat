@@ -1,4 +1,29 @@
+  Sentry.init({
+    dsn: "https://a1c62d99ef214633b2852cc684b66f49@app.glitchtip.com/20613",
 
+    // отключаем трейсинг — нужен только сбор ошибок
+    tracesSampleRate: 0,
+
+    environment: "production",
+
+    beforeSend(event) {
+      return {
+        userPhone: localStorage.getItem('myPhone') || undefined,
+      };
+    }
+  });
+
+  // ловим глобальные ошибки
+  window.onerror = function (msg, url, lineNo, columnNo, error) {
+    Sentry.captureException(error || msg);
+  };
+
+  // ловим unhandled promise rejections
+  window.onunhandledrejection = function (event) {
+    Sentry.captureException(event.reason);
+  };
+
+  
 // ===== MINIMAL INLINE MD5 (RFC 1321) =====
 function md5(str){
     function safeAdd(x,y){const lsw=(x&0xffff)+(y&0xffff);return(((x>>16)+(y>>16)+(lsw>>16))<<16)|(lsw&0xffff);}
@@ -1218,23 +1243,44 @@ function sendCallNotification(callerNumber, calleeNumber, subroom, cluster, call
     const history = loadCallsHistory();
     const entry = history.find(e => normalizePhone(e.number) === normalizePhone(callerNumber));
     const callerAlias = (entry && entry.alias) ? entry.alias : '';
-    const msg = JSON.stringify({
-        type: 'incoming_call',
-        callSignature,
-        callerNumber: normalizePhone(callerNumber),
-        callerAlias,
-        subroom,
-        cluster,
-        timestamp: Date.now()
-    });
-    let sent = false;
+    const INTERVAL_MS = 500;
+    const MAX_DURATION = 30000; // stop repeating after 30s
+    let intervalTimer = null;
+    let durationTimer = null;
+
+    function buildMsg(){
+        return JSON.stringify({
+            type: 'incoming_call',
+            callSignature,
+            callerNumber: normalizePhone(callerNumber),
+            callerAlias,
+            subroom,
+            cluster,
+            timestamp: Date.now()
+        });
+    }
+
+    function sendIfOpen(){
+        if(tempWs && tempWs.readyState === WebSocket.OPEN){
+            try{ tempWs.send(buildMsg()); console.log('[notif] Call notification sent to', normalizePhone(calleeNumber)); }
+            catch(e){ console.warn('[notif] Failed to send notification', e); }
+        }
+    }
+
     tempWs.onopen = () => {
-        try{ tempWs.send(msg); sent = true; console.log('[notif] Call notification sent to', normalizePhone(calleeNumber)); }
-        catch(e){ console.warn('[notif] Failed to send notification', e); }
-        setTimeout(() => { try{ tempWs.close(); }catch(e){} }, 5000);
+        // send immediately then every INTERVAL_MS until MAX_DURATION
+        sendIfOpen();
+        intervalTimer = setInterval(sendIfOpen, INTERVAL_MS);
+        durationTimer = setTimeout(()=>{
+            if(intervalTimer){ clearInterval(intervalTimer); intervalTimer = null; }
+            try{ tempWs.close(); }catch(e){}
+        }, MAX_DURATION);
     };
     tempWs.onerror = (e) => { console.warn('[notif] Notification socket error', e); };
-    tempWs.onclose = () => { if(!sent) console.warn('[notif] Notification socket closed before message sent'); };
+    tempWs.onclose = () => {
+        if(intervalTimer){ clearInterval(intervalTimer); intervalTimer = null; }
+        if(durationTimer){ clearTimeout(durationTimer); durationTimer = null; }
+    };
 }
 
 // ===== INITIATE CALL =====
