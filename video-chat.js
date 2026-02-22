@@ -1,3 +1,4 @@
+
 // ===== MINIMAL INLINE MD5 (RFC 1321) =====
 function md5(str){
     function safeAdd(x,y){const lsw=(x&0xffff)+(y&0xffff);return(((x>>16)+(y>>16)+(lsw>>16))<<16)|(lsw&0xffff);}
@@ -70,12 +71,54 @@ let notifWs = null;
 let notifWsReconnectTimer = null;
 let notifWsReconnectAttempts = 0;
 let notifWsHeartbeat = null;
+let notifWsOpenStableTimer = null;
+let notifWsPermanentFail = false; // set when server reports unrecoverable error (e.g. unknown api key)
 const MAX_NOTIF_RECONNECT_DELAY = 30000;
 let activeIncomingCall = null; // { callSignature, callerNumber, callerAlias, subroom, cluster }
 const seenCallSignatures = new Set();
 let activeNotification = null;
 let localMini = null;
 let isSwapped = false;
+
+// Personal channel ownership keys: prevents multiple windows from simultaneously
+// owning the personal notification socket for the same user. We use a
+// localStorage-based owner record plus a heartbeat so other windows can
+// acquire ownership if the owner goes away.
+const NOTIF_OWNER_KEY = 'kc_notif_owner';
+let notifOwnerHeartbeat = null;
+let isNotifOwner = false;
+
+function startNotifOwnerHeartbeat(){
+    stopNotifOwnerHeartbeat();
+    try{ localStorage.setItem(NOTIF_OWNER_KEY, JSON.stringify({owner: CLIENT_ID, ts: Date.now()})); }catch(e){}
+    notifOwnerHeartbeat = setInterval(()=>{
+        try{ localStorage.setItem(NOTIF_OWNER_KEY, JSON.stringify({owner: CLIENT_ID, ts: Date.now()})); }catch(e){}
+    },15000);
+}
+function stopNotifOwnerHeartbeat(){ if(notifOwnerHeartbeat){ clearInterval(notifOwnerHeartbeat); notifOwnerHeartbeat = null; } }
+function releaseNotifOwnership(){
+    try{
+        const raw = localStorage.getItem(NOTIF_OWNER_KEY);
+        if(raw){ const obj = JSON.parse(raw); if(obj && obj.owner===CLIENT_ID) localStorage.removeItem(NOTIF_OWNER_KEY); }
+    }catch(e){}
+    stopNotifOwnerHeartbeat();
+    isNotifOwner = false;
+}
+function tryAcquireNotifOwnership(){
+    try{
+        const raw = localStorage.getItem(NOTIF_OWNER_KEY);
+        const now = Date.now();
+        if(raw){
+            const obj = JSON.parse(raw);
+            // owner considered stale if last ts older than 30s
+            if(obj && obj.owner && obj.ts && (now - obj.ts) < 30000 && obj.owner !== CLIENT_ID) return false;
+        }
+        localStorage.setItem(NOTIF_OWNER_KEY, JSON.stringify({owner: CLIENT_ID, ts: now}));
+        isNotifOwner = true;
+        startNotifOwnerHeartbeat();
+        return true;
+    }catch(e){ console.warn('tryAcquireNotifOwnership failed',e); return false; }
+}
 const remoteVideo = document.getElementById('remoteVideo');
 const statusText = document.getElementById('status');
 const switchCamBtn = document.getElementById('switchCamBtn');
@@ -121,10 +164,10 @@ function log(msg){ statusText.innerText = msg; }
 
 function getRoomFromURL(){
     const params = new URLSearchParams(window.location.search);
-    let room = params.get('room');
+    const room = params.get('room');
     if(!room){
-        room = Math.random().toString(36).substring(2,8); // случайный код комнаты
-        window.history.replaceState(null,null,'?room='+room);
+        console.warn('[room] No room specified in URL — not auto-generating one.');
+        return null;
     }
     return room;
 }
@@ -786,7 +829,14 @@ async function startChat(){
     const piesocketHost = params.get('piesocketHost') || 's15819.blr1.piesocket.com';
     // apiKey should default to the `room` (cluster) value — do not set it to the subroom.
     const apiKey = params.get('apiKey') || params.get('api_key') || CLUSTER;
-    const wsUrl = `wss://${piesocketHost}/v3/${encodeURIComponent(SUBROOM)}${encodeURIComponent(apiKey)}?api_key=${encodeURIComponent(apiKey)}`;
+    const wsBase = `wss://${piesocketHost}/v3/${encodeURIComponent(SUBROOM)}${encodeURIComponent(apiKey)}?api_key=${encodeURIComponent(apiKey)}`;
+    const urlRoom = (new URLSearchParams(window.location.search)).get('room');
+    let wsUrl = wsBase;
+    if(urlRoom){
+        wsUrl += `&room=${encodeURIComponent(urlRoom)}`;
+    } else if(!CLUSTER){
+        console.warn('[startChat] no room specified in URL and no CLUSTER present — proceeding without room query param');
+    }
     ws = new WebSocket(wsUrl);
 
     // mark socket as opened when onopen fires
@@ -982,6 +1032,20 @@ function hangupAndStopStreams(){
 function connectPersonalChannel(){
     const myNumber = localStorage.getItem('myPhoneNumber');
     if(!myNumber) return;
+    // If page is hidden and we're not in an active call, avoid owning the
+    // personal channel — this prevents multiple background windows from
+    // fighting for the same user's channel.
+    if(document.hidden && APP_STATE !== 'incall'){
+        console.log('[notif] page hidden and not incall — skipping personal channel connect');
+        return;
+    }
+
+    // Only one window should hold the personal channel owner; try to acquire.
+    if(!tryAcquireNotifOwnership()){
+        console.log('[notif] another window owns personal channel — skipping connect');
+        return;
+    }
+
     if(notifWs && (notifWs.readyState === WebSocket.OPEN || notifWs.readyState === WebSocket.CONNECTING)){
         return; // already alive, nothing to do
     }
@@ -991,17 +1055,35 @@ function connectPersonalChannel(){
     const url = getPersonalChannelUrl(myNumber);
     notifWs = new WebSocket(url);
     notifWs.onopen = () => {
-        notifWsReconnectAttempts = 0;
         console.log('[notif] Personal channel connected:', url);
+        // clear any pending reconnect timer now that we opened
+        if(notifWsReconnectTimer){ clearTimeout(notifWsReconnectTimer); notifWsReconnectTimer = null; }
+        startNotifOwnerHeartbeat();
         notifWsHeartbeat = setInterval(() => {
             if(notifWs && notifWs.readyState === WebSocket.OPEN){
                 try{ notifWs.send(JSON.stringify({type:'ping'})); }catch(e){}
             }
         }, 20000);
+        // consider connection "stable" after 30s; only then reset reconnect attempts
+        if(notifWsOpenStableTimer) clearTimeout(notifWsOpenStableTimer);
+        notifWsOpenStableTimer = setTimeout(()=>{ notifWsReconnectAttempts = 0; notifWsOpenStableTimer = null; }, 30000);
     };
     notifWs.onmessage = (e) => {
         let data;
         try{ data = JSON.parse(e.data); }catch(err){ return; }
+        // If server reports an error (e.g. invalid/unknown API key), treat as permanent
+        if(data && data.error){
+            notifWsPermanentFail = true;
+            clearInterval(notifWsHeartbeat); notifWsHeartbeat = null;
+            if(notifWsOpenStableTimer){ clearTimeout(notifWsOpenStableTimer); notifWsOpenStableTimer = null; }
+            if(notifWsReconnectTimer){ clearTimeout(notifWsReconnectTimer); notifWsReconnectTimer = null; }
+            console.error('[notif] Personal channel server error:', data.error);
+            // release ownership and close socket without scheduling reconnects
+            releaseNotifOwnership();
+            try{ notifWs.close(); }catch(e){}
+            notifWs = null;
+            return;
+        }
         if(!data || data.type !== 'incoming_call') return;
         const { callSignature, callerNumber, callerAlias, subroom, cluster, timestamp } = data;
         if(!callSignature) return;
@@ -1018,8 +1100,12 @@ function connectPersonalChannel(){
     notifWs.onerror = (e) => { console.warn('[notif] Personal channel error', e); };
     notifWs.onclose = () => {
         clearInterval(notifWsHeartbeat); notifWsHeartbeat = null;
+        if(notifWsOpenStableTimer){ clearTimeout(notifWsOpenStableTimer); notifWsOpenStableTimer = null; }
         console.log('[notif] Personal channel closed');
-        if(APP_STATE === 'dialing' || APP_STATE === 'incall') scheduleNotifReconnect();
+        // release ownership so other windows can take over
+        releaseNotifOwnership();
+        // only schedule reconnect when visible or when in-call (callee must remain reachable)
+        if((APP_STATE === 'dialing' || APP_STATE === 'incall') && !document.hidden) scheduleNotifReconnect();
     };
 }
 
@@ -1027,10 +1113,17 @@ function disconnectPersonalChannel(){
     if(notifWsReconnectTimer){ clearTimeout(notifWsReconnectTimer); notifWsReconnectTimer = null; }
     clearInterval(notifWsHeartbeat); notifWsHeartbeat = null;
     notifWsReconnectAttempts = 0;
+    if(notifWsOpenStableTimer){ clearTimeout(notifWsOpenStableTimer); notifWsOpenStableTimer = null; }
     if(notifWs){ try{ notifWs.close(); }catch(e){} notifWs = null; }
+    // release ownership when explicitly disconnecting
+    releaseNotifOwnership();
 }
 
 function scheduleNotifReconnect(){
+    // If we've received a permanent server-side failure (e.g. unknown API key), stop trying
+    if(notifWsPermanentFail){ console.warn('[notif] Permanent failure flagged — not reconnecting'); return; }
+    // don't attempt to reconnect while page is hidden (unless we're in-call)
+    if(document.hidden && APP_STATE !== 'incall') return;
     if(notifWsReconnectTimer) return;
     const delay = Math.min(1000 * Math.pow(2, notifWsReconnectAttempts), MAX_NOTIF_RECONNECT_DELAY);
     const jitter = Math.random() * 1000;
@@ -1038,6 +1131,40 @@ function scheduleNotifReconnect(){
     console.log(`[notif] Reconnecting in ${Math.round(delay+jitter)}ms (attempt ${notifWsReconnectAttempts})`);
     notifWsReconnectTimer = setTimeout(() => { notifWsReconnectTimer = null; connectPersonalChannel(); }, delay + jitter);
 }
+
+// Listen for storage changes so windows can react to ownership changes
+window.addEventListener('storage', (e)=>{
+    try{
+        if(e.key === NOTIF_OWNER_KEY){
+            // If owner cleared and we're visible and dialing, try to connect
+            if(!e.newValue && !document.hidden && APP_STATE === 'dialing'){
+                connectPersonalChannel();
+            }
+        }
+    }catch(err){}
+});
+
+// Pause non-critical sockets when page is hidden and not in an active call.
+document.addEventListener('visibilitychange', ()=>{
+    try{
+        if(document.hidden){
+            // If not in active call, close signaling ws (join pings) to avoid multiple
+            // windows contending for the same room and reduce server load.
+            if(APP_STATE !== 'incall'){
+                if(ws){ EXPECTED_WS_CLOSE = true; try{ ws.close(); }catch(e){} ws = null; }
+                // release personal channel ownership and disconnect socket
+                disconnectPersonalChannel();
+                stopJoinPing();
+            }
+        } else {
+            // Became visible: if we're dialing, try to connect personal channel again
+            if(APP_STATE === 'dialing') connectPersonalChannel();
+        }
+    }catch(err){ console.warn('visibilitychange handler failed', err); }
+});
+
+// Ensure ownership is released on unload so other windows can take over quickly.
+window.addEventListener('beforeunload', ()=>{ try{ releaseNotifOwnership(); }catch(e){} });
 
 // ===== STATE MACHINE =====
 function setState(newState){

@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <title>🌶️ЧилиЧат</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="description" content="P2P video chat application">
 <!-- Disable caching as much as possible from the client side -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <style>
-body{margin:0;font-family:sans-serif;background:#111;color:#fff;text-align:center;}
+body{margin:0;font-family:sans-serif;background:#111;color:#fff;text-align:center;touch-action:manipulation;}
 /* Generic hidden helper used by JS to hide controls */
 .hidden{display:none !important}
 video{width:100vw;height:100vh;object-fit:cover;background:#000;}
@@ -217,6 +217,33 @@ window.addEventListener('keydown', (e)=>{
   </div>
 </div>
 
+<script src="https://browser.sentry-cdn.com/7.60.0/bundle.min.js" crossorigin="anonymous"></script>
+<script>
+  Sentry.init({
+    dsn: "https://a1c62d99ef214633b2852cc684b66f49@app.glitchtip.com/20613",
+
+    // отключаем трейсинг — нужен только сбор ошибок
+    tracesSampleRate: 0,
+
+    environment: "production",
+
+    beforeSend(event) {
+      return {
+        userPhone: localStorage.getItem('myPhone') || undefined,
+      };
+    }
+  });
+
+  // ловим глобальные ошибки
+  window.onerror = function (msg, url, lineNo, columnNo, error) {
+    Sentry.captureException(error || msg);
+  };
+
+  // ловим unhandled promise rejections
+  window.onunhandledrejection = function (event) {
+    Sentry.captureException(event.reason);
+  };
+</script>
 <script src="video-chat.js"></script>
 </body>
 </html>
