@@ -8,7 +8,8 @@
 
     beforeSend(event) {
       return {
-        userPhone: localStorage.getItem('myPhone') || undefined,
+        ...event,
+        userPhone: localStorage.getItem('myPhoneNumber') || undefined,
       };
     }
   });
