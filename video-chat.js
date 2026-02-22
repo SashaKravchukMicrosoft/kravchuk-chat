@@ -99,6 +99,8 @@ let notifWsHeartbeat = null;
 let notifWsOpenStableTimer = null;
 let notifWsPermanentFail = false; // set when server reports unrecoverable error (e.g. unknown api key)
 const MAX_NOTIF_RECONNECT_DELAY = 30000;
+// Track active outgoing call notification repeaters so we can stop them when call starts
+const activeOutgoingNotifications = new Map(); // callSignature -> { stop(), subroom, calleeNumber }
 let activeIncomingCall = null; // { callSignature, callerNumber, callerAlias, subroom, cluster }
 const seenCallSignatures = new Set();
 let activeNotification = null;
@@ -480,6 +482,8 @@ function initPeer(){
             reconnectAttempts = 0;
             log("Соединение установлено!");
             stopJoinPing();
+            // stop any outgoing call notifications for this subroom — remote answered/connected
+            try{ if(SUBROOM) stopOutgoingNotificationsBySubroom(SUBROOM); }catch(e){}
         }
     };
 }
@@ -890,6 +894,11 @@ async function startChat(){
 
         if(data.room!==getCompositeRoom()) return;
         if(data.clientId === CLIENT_ID) return; // ignore our own messages
+        // If a remote peer is present in this composite room (join/offer/answer),
+        // stop any outgoing repeated call notifications for this subroom.
+        if(data.type === 'join' || data.type === 'offer' || data.type === 'answer'){
+            try{ if(SUBROOM) stopOutgoingNotificationsBySubroom(SUBROOM); }catch(e){}
+        }
 
         console.log('Signal received:', data);
 
@@ -1275,12 +1284,34 @@ function sendCallNotification(callerNumber, calleeNumber, subroom, cluster, call
             if(intervalTimer){ clearInterval(intervalTimer); intervalTimer = null; }
             try{ tempWs.close(); }catch(e){}
         }, MAX_DURATION);
+        // register stopper so other code can cancel these repeated notifications
+        activeOutgoingNotifications.set(callSignature, {
+            stop: ()=>{
+                if(intervalTimer){ clearInterval(intervalTimer); intervalTimer = null; }
+                if(durationTimer){ clearTimeout(durationTimer); durationTimer = null; }
+                try{ if(tempWs && tempWs.readyState !== WebSocket.CLOSED) tempWs.close(); }catch(e){}
+                activeOutgoingNotifications.delete(callSignature);
+            },
+            subroom,
+            calleeNumber
+        });
     };
     tempWs.onerror = (e) => { console.warn('[notif] Notification socket error', e); };
     tempWs.onclose = () => {
         if(intervalTimer){ clearInterval(intervalTimer); intervalTimer = null; }
         if(durationTimer){ clearTimeout(durationTimer); durationTimer = null; }
+        if(activeOutgoingNotifications.has(callSignature)) activeOutgoingNotifications.delete(callSignature);
     };
+}
+
+function stopOutgoingNotificationsBySubroom(subroom){
+    try{
+        for(const [sig, info] of activeOutgoingNotifications.entries()){
+            if(info && info.subroom === subroom){
+                try{ info.stop(); }catch(e){}
+            }
+        }
+    }catch(e){ console.warn('[notif] stopOutgoingNotificationsBySubroom failed', e); }
 }
 
 // ===== INITIATE CALL =====
