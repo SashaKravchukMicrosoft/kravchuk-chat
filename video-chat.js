@@ -1464,6 +1464,10 @@ function setupScreenHandlers(){
 
 // ===== DIAL PAD HANDLERS =====
 function initDialPad(){
+    // Prevent double-initialization (fixes duplicate handlers after hangup/restart)
+    if (initDialPad._inited) return;
+    initDialPad._inited = true;
+
     let zeroLongPressed = false;
 
     document.querySelectorAll('.dial-key').forEach(btn=>{
