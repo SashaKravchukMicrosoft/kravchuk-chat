@@ -14,15 +14,49 @@
     }
   });
 
-  // ловим глобальные ошибки
-  window.onerror = function (msg, url, lineNo, columnNo, error) {
-    Sentry.captureException(error || msg);
-  };
+    // Helper to format errors into a copyable JSON blob for sharing in Copilot/Sentry
+    function formatErrorForCopilot(err, extra={}){
+        let message = '';
+        let stack = '';
+        let name = '';
+        try{
+            if(err instanceof Error){ name = err.name; message = err.message; stack = err.stack || ''; }
+            else if(typeof err === 'object') { message = JSON.stringify(err); }
+            else { message = String(err); }
+        }catch(e){ message = String(err); }
+        const payload = {
+            timestamp: Date.now(),
+            name,
+            message,
+            stack,
+            clientId: typeof CLIENT_ID !== 'undefined' ? CLIENT_ID : null,
+            myPhone: (typeof localStorage !== 'undefined') ? localStorage.getItem('myPhoneNumber') : null,
+            compositeRoom: (typeof getCompositeRoom === 'function') ? getCompositeRoom() : null,
+            SUBROOM: typeof SUBROOM !== 'undefined' ? SUBROOM : null,
+            CLUSTER: typeof CLUSTER !== 'undefined' ? CLUSTER : null,
+            extra
+        };
+        return payload;
+    }
 
-  // ловим unhandled promise rejections
-  window.onunhandledrejection = function (event) {
-    Sentry.captureException(event.reason);
-  };
+    function reportErrorForCopilot(err, extra={}){
+        try{
+            const payload = formatErrorForCopilot(err, extra);
+            const json = JSON.stringify(payload);
+            try{ if(typeof Sentry !== 'undefined' && Sentry && Sentry.captureException) Sentry.captureException(err); }catch(e){}
+            return payload;
+        }catch(e){ try{ console.error('reportErrorForCopilot failed', e); }catch(_){} }
+    }
+
+    // ловим глобальные ошибки and produce a copyable blob for Copilot
+    window.onerror = function (msg, url, lineNo, columnNo, error) {
+        reportErrorForCopilot(error || {message: msg, file: url, line: lineNo, column: columnNo});
+    };
+
+    // ловим unhandled promise rejections
+    window.onunhandledrejection = function (event) {
+        reportErrorForCopilot(event.reason || {message: 'UnhandledRejection'});
+    };
 
 // helper: create WebSocket and attach Sentry breadcrumbs/handlers
 function createLoggedWebSocket(url, tag){
@@ -33,7 +67,9 @@ function createLoggedWebSocket(url, tag){
         ws.addEventListener('error', (ev)=>{
             try{
                 Sentry.addBreadcrumb({ category: 'ws', message: `error ${tag} ${url}`, level: 'error' });
-                Sentry.captureException(new Error(`WebSocket error (${tag}) ${url}`));
+                const werr = new Error(`WebSocket error (${tag}) ${url}`);
+                try{ Sentry.captureException(werr); }catch(e){}
+                try{ reportErrorForCopilot(werr, { wsUrl: url, tag }); }catch(e){}
             }catch(e){}
         });
         ws.addEventListener('close', (ev)=>{
@@ -47,6 +83,7 @@ function createLoggedWebSocket(url, tag){
         return ws;
     }catch(err){
         try{ Sentry.captureException(err); }catch(e){}
+        try{ reportErrorForCopilot(err); }catch(e){}
         throw err;
     }
 }
@@ -188,6 +225,7 @@ const roomThumb = document.getElementById('roomThumb');
 
 // ===== PHONE / STATE MACHINE GLOBALS =====
 let APP_STATE = 'setup';
+let APP_READY_FOR_UI = false;
 let dialedNumber = '';
 const setupScreen        = document.getElementById('setupScreen');
 const dialpadScreen      = document.getElementById('dialpadScreen');
@@ -873,29 +911,60 @@ function populateRoomSelector(){
 }
 
 async function startChat(){
+    // Early: validate apiKey and probe signaling WSS before showing UI
+    const params = new URLSearchParams(window.location.search);
+    const piesocketHost = params.get('piesocketHost') || 's15819.blr1.piesocket.com';
+    const apiKey = params.get('apiKey') || params.get('api_key') || CLUSTER;
+    if(!apiKey){
+        show404AndLock('Missing WSS API key for signaling (apiKey / api_key or cluster parameter required).');
+        return;
+    }
+
+    const wsBase = `wss://${piesocketHost}/v3/${encodeURIComponent(SUBROOM)}${encodeURIComponent(apiKey)}?api_key=${encodeURIComponent(apiKey)}`;
+    const urlRoom = params.get('room');
+    let wsUrl = wsBase;
+    if(urlRoom) wsUrl += `&room=${encodeURIComponent(urlRoom)}`;
+
+    // Probe the signaling socket: wait for open with timeout
+    try{
+        ws = createLoggedWebSocket(wsUrl, 'signaling-probe');
+    }catch(err){
+        try{ reportErrorForCopilot(err, { wsUrl, apiKeyPresent: !!apiKey }); }catch(e){}
+        show404AndLock('Failed to create signaling socket (WSS).');
+        return;
+    }
+
+    const PROBE_TIMEOUT = 5000;
+    let probeOpened = false;
+    const probePromise = new Promise((resolve, reject) => {
+        const onopen = () => { probeOpened = true; cleanup(); resolve(); };
+        const onerror = (e) => { if(!probeOpened){ cleanup(); reject(new Error('WebSocket error during probe')); } };
+        const onclose = (ev) => { if(!probeOpened){ cleanup(); reject(new Error('WebSocket closed during probe')); } };
+        const to = setTimeout(()=>{ if(!probeOpened){ cleanup(); reject(new Error('WebSocket probe timeout')); } }, PROBE_TIMEOUT);
+        function cleanup(){ clearTimeout(to); try{ ws.removeEventListener('open', onopen); ws.removeEventListener('error', onerror); ws.removeEventListener('close', onclose); }catch(e){} }
+        ws.addEventListener('open', onopen);
+        ws.addEventListener('error', onerror);
+        ws.addEventListener('close', onclose);
+    });
+
+    try{
+        await probePromise;
+    }catch(err){
+        try{ reportErrorForCopilot(err, { wsUrl, apiKeyPresent: !!apiKey }); }catch(e){}
+        try{ if(ws){ try{ ws.close(); }catch(e){} ws = null; } }catch(e){}
+        show404AndLock('Failed to connect to signaling server (WSS).');
+        return;
+    }
+
+    // Probe succeeded — enable UI and initialize dialpad handlers, then start camera/peer
+    APP_READY_FOR_UI = true;
+    try{ initDialPad(); }catch(e){}
+
     log("Запуск камеры...");
     await startCamera();
     initPeer();
 
-    // Use composite room (cluster:subroom) for in-message scoping only
-    const composite = encodeURIComponent(getCompositeRoom());
-    // The PieSocket channel (path) and api_key must remain the cluster (original `room` param).
-    // Read PieSocket host and api key from URL params when provided (preferred)
-    const params = new URLSearchParams(window.location.search);
-    const piesocketHost = params.get('piesocketHost') || 's15819.blr1.piesocket.com';
-    // apiKey should default to the `room` (cluster) value — do not set it to the subroom.
-    const apiKey = params.get('apiKey') || params.get('api_key') || CLUSTER;
-    const wsBase = `wss://${piesocketHost}/v3/${encodeURIComponent(SUBROOM)}${encodeURIComponent(apiKey)}?api_key=${encodeURIComponent(apiKey)}`;
-    const urlRoom = (new URLSearchParams(window.location.search)).get('room');
-    let wsUrl = wsBase;
-    if(urlRoom){
-        wsUrl += `&room=${encodeURIComponent(urlRoom)}`;
-    } else if(!CLUSTER){
-        console.warn('[startChat] no room specified in URL and no CLUSTER present — proceeding without room query param');
-    }
-    ws = createLoggedWebSocket(wsUrl, 'signaling');
-
-    // mark socket as opened when onopen fires
+    // Attach runtime handlers for the signaling socket
     ws.onopen = async ()=>{
         WS_WAS_OPEN = true;
         log("Сигналинг подключён, отправляю JOIN...");
@@ -904,25 +973,18 @@ async function startChat(){
 
     ws.onmessage = async e=>{
         let data;
-        try{
-            data = JSON.parse(e.data);
-        }catch(err){
-            console.warn('ws message parse failed', err);
-            return;
-        }
+        try{ data = JSON.parse(e.data); }catch(err){ console.warn('ws message parse failed', err); return; }
 
-        // If the signaling server returns an error payload, stop JOIN pings
-        // and surface the error to the user (e.g. {"error":"Unknown api key"}).
+        // If the signaling server returns an error payload (e.g. {"error":"Unknown api key"}), lock app.
         if(data && data.error){
             stopJoinPing();
-            log('Ошибка WSS сервера: ' + data.error);
+            try{ reportErrorForCopilot(new Error('Signaling server error: '+String(data.error)), { data }); }catch(e){}
+            try{ show404AndLock('Signaling server error: '+String(data.error)); }catch(e){}
             return;
         }
 
         if(data.room!==getCompositeRoom()) return;
         if(data.clientId === CLIENT_ID) return; // ignore our own messages
-        // If a remote peer is present in this composite room (join/offer/answer),
-        // stop any outgoing repeated call notifications for this subroom.
         if(data.type === 'join' || data.type === 'offer' || data.type === 'answer'){
             try{ if(SUBROOM) stopOutgoingNotificationsBySubroom(SUBROOM); }catch(e){}
         }
@@ -930,7 +992,6 @@ async function startChat(){
         console.log('Signal received:', data);
 
         if(data.type === 'join'){
-            // Other peer joined — deterministic offer: higher clientId starts
             if(!hasSentOffer && CLIENT_ID > data.clientId){
                 try{
                     const offer = await pc.createOffer();
@@ -959,14 +1020,13 @@ async function startChat(){
         }
     };
 
-    ws.onerror = e => { console.error('ws error', e); log("Ошибка сигналинга"); };
-    ws.onclose = () => { 
+    ws.onerror = e => { console.error('ws error', e); log("Ошибка сигналинга"); if(!WS_WAS_OPEN) try{ show404AndLock('Signaling socket error (could not connect).'); }catch(e){} };
+    ws.onclose = (ev) => { 
         stopJoinPing(); 
         if(EXPECTED_WS_CLOSE){ EXPECTED_WS_CLOSE = false; WS_WAS_OPEN = false; return; }
         if(!WS_WAS_OPEN){
-            // socket never opened successfully
             WS_WAS_OPEN = false;
-            log("Ошибка сигналинга");
+            try{ show404AndLock('Failed to connect to signaling server (WSS).'); }catch(e){}
         } else {
             WS_WAS_OPEN = false;
             log("Сигналинг закрыт");
@@ -1042,14 +1102,15 @@ function getPersonalChannelUrl(number){
     const p = new URLSearchParams(window.location.search);
     const host = p.get('piesocketHost') || 's15819.blr1.piesocket.com';
     const apiKey = p.get('apiKey') || p.get('api_key') || CLUSTER;
-    return `wss://${host}/v3/${normalizePhone(number).replace(/\D/g,'')}?api_key=${encodeURIComponent(apiKey)}`;
+    // normalizePhone returns digits-only; encode for URL
+    return `wss://${host}/v3/${encodeURIComponent(normalizePhone(number))}?api_key=${encodeURIComponent(apiKey)}`;
 }
 
 // ===== PHONE NUMBER NORMALIZATION =====
 function normalizePhone(n){
     const s = String(n).trim();
-    const plus = s.startsWith('+') ? '+' : '';
-    return plus + s.replace(/\D/g,'');
+    // Return digits only (strip any + or other non-digit chars)
+    return s.replace(/\D/g,'');
 }
 
 // ===== CALLS HISTORY (localStorage) =====
@@ -1087,6 +1148,32 @@ function hangupAndStopStreams(){
         if(localMini){ localMini.remove(); localMini=null; }
         isSwapped=false;
     }catch(e){ console.error('hangupAndStopStreams failed',e); }
+}
+
+// If signaling fails or API key is missing, lock the UI and show a 404-style message.
+let APP_LOCKED_404 = false;
+function escapeHTML(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;" })[c]); }
+function show404AndLock(msg){
+    try{
+        if(APP_LOCKED_404) return;
+        APP_LOCKED_404 = true;
+        // tear down active connections and timers
+        try{ stopJoinPing(); }catch(e){}
+        try{ if(ws){ EXPECTED_WS_CLOSE=true; ws.close(); ws=null; } }catch(e){}
+        try{ if(notifWs){ notifWs.close(); notifWs=null; } }catch(e){}
+        try{ hangupAndStopStreams(); }catch(e){}
+        try{ releaseNotifOwnership(); }catch(e){}
+
+        const bodyHtml = `
+            <div id="kc-404" style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;align-items:center;justify-content:center;height:100vh;background:#111;color:#fff;flex-direction:column;">
+              <h1 style="font-size:88px;margin:0;">404</h1>
+              <h2 style="margin:8px 0 20px 0;font-weight:600">Signaling Unavailable</h2>
+              <div style="max-width:720px;padding:16px;color:#ddd;text-align:center;">${escapeHTML(msg||'Required WSS API key missing or signaling server unreachable.')}</div>
+            </div>`;
+        try{ document.documentElement.innerHTML = bodyHtml; }catch(e){ try{ document.body.innerHTML = bodyHtml; }catch(_){} }
+        console.error('APP LOCKED 404:', msg);
+        try{ reportErrorForCopilot(new Error('APP LOCKED 404: '+String(msg)), {reason: 'signaling'}); }catch(e){}
+    }catch(e){ console.error('show404AndLock failed', e); }
 }
 
 // ===== PERSONAL NOTIFICATION CHANNEL =====
@@ -1139,6 +1226,9 @@ function connectPersonalChannel(){
             if(notifWsOpenStableTimer){ clearTimeout(notifWsOpenStableTimer); notifWsOpenStableTimer = null; }
             if(notifWsReconnectTimer){ clearTimeout(notifWsReconnectTimer); notifWsReconnectTimer = null; }
             console.error('[notif] Personal channel server error:', data.error);
+            try{ reportErrorForCopilot(new Error('Personal channel server error: '+String(data.error)), { tag: 'personal', data }); }catch(e){}
+            // lock the app (show 404) for fatal personal-channel auth failures
+            try{ show404AndLock('Personal channel error: '+String(data.error)); }catch(e){}
             // release ownership and close socket without scheduling reconnects
             releaseNotifOwnership();
             try{ notifWs.close(); }catch(e){}
@@ -1233,14 +1323,14 @@ function setState(newState){
     // Notification channel lifecycle
     hideIncomingCallDialog();
     if(newState === 'setup') disconnectPersonalChannel();
-    if(newState === 'dialing'){ requestNotificationPermission(); connectPersonalChannel(); }
+    if(newState === 'dialing'){ connectPersonalChannel(); }
     // (incall: keep notifWs alive so callee receives further calls)
     const isSetup   = newState==='setup';
     const isDialing = newState==='dialing';
     const isIncall  = newState==='incall';
 
     if(setupScreen)   setupScreen.classList.toggle('hidden',   !isSetup);
-    if(dialpadScreen) dialpadScreen.classList.toggle('hidden', !isDialing);
+    if(dialpadScreen) dialpadScreen.classList.toggle('hidden', !isDialing || !APP_READY_FOR_UI);
     if(remoteVideo)   remoteVideo.classList.toggle('hidden',   !isIncall);
     const ctrlEl = document.getElementById('controls');
     if(ctrlEl)      ctrlEl.classList.toggle('hidden',          !isIncall);
@@ -1390,10 +1480,11 @@ function initDialPad(){
         let zeroTimer;
         zeroBtn.addEventListener('pointerdown',()=>{
             zeroTimer = setTimeout(()=>{
-                zeroLongPressed = true;
-                dialedNumber += '+';
-                updateDialDisplay();
-            }, 500);
+                    zeroLongPressed = true;
+                    // insert '00' instead of '+' to avoid relying on '+' in logic
+                    dialedNumber += '00';
+                    updateDialDisplay();
+                }, 500);
         });
         zeroBtn.addEventListener('pointerup',  ()=>clearTimeout(zeroTimer));
         zeroBtn.addEventListener('pointercancel',()=>{ clearTimeout(zeroTimer); zeroLongPressed=false; });
@@ -1413,7 +1504,8 @@ function initDialPad(){
         if(APP_STATE !== 'dialing') return;
         if(burgerPanel && burgerPanel.classList.contains('open')) return;
         const key = e.key;
-        if(/^[\d*#+]$/.test(key)){
+        // disallow literal '+' in keyboard input; use digits only
+        if(/^[\d*#]$/.test(key)){
             e.preventDefault();
             dialedNumber += key;
             updateDialDisplay();
@@ -1581,11 +1673,56 @@ function initBurgerMenu(){
 }
 
 // ===== APP ENTRY POINT =====
-function initApp(){
+async function initApp(){
     initContactPicker();
     setupScreenHandlers();
-    initDialPad();
     initBurgerMenu();
+
+    // Probe signaling early before showing keypad or requesting notifications
+    try{
+        const params = new URLSearchParams(window.location.search);
+        const piesocketHost = params.get('piesocketHost') || 's15819.blr1.piesocket.com';
+        const apiKey = params.get('apiKey') || params.get('api_key') || CLUSTER;
+        if(!apiKey){
+            show404AndLock('Missing WSS API key for signaling (apiKey / api_key or cluster parameter required).');
+            return;
+        }
+        const wsBase = `wss://${piesocketHost}/v3/${encodeURIComponent(SUBROOM)}${encodeURIComponent(apiKey)}?api_key=${encodeURIComponent(apiKey)}`;
+        const urlRoom = params.get('room');
+        let wsUrl = wsBase;
+        if(urlRoom) wsUrl += `&room=${encodeURIComponent(urlRoom)}`;
+
+        let probeWs;
+        try{ probeWs = createLoggedWebSocket(wsUrl, 'signaling-startup-probe'); }catch(err){
+            try{ reportErrorForCopilot(err, { piesocketHost, apiKeyPresent: !!apiKey }); }catch(e){}
+            show404AndLock('Failed to create signaling socket (WSS).');
+            return;
+        }
+        const PROBE_TIMEOUT = 5000;
+        let opened = false;
+        await new Promise((resolve, reject)=>{
+            const onopen = ()=>{ opened=true; cleanup(); resolve(); };
+            const onerror = ()=>{ if(!opened){ cleanup(); reject(new Error('probe error')); } };
+            const onclose = ()=>{ if(!opened){ cleanup(); reject(new Error('probe closed')); } };
+            const to = setTimeout(()=>{ if(!opened){ cleanup(); reject(new Error('probe timeout')); } }, PROBE_TIMEOUT);
+            function cleanup(){ clearTimeout(to); try{ probeWs.removeEventListener('open', onopen); probeWs.removeEventListener('error', onerror); probeWs.removeEventListener('close', onclose); }catch(e){} }
+            probeWs.addEventListener('open', onopen);
+            probeWs.addEventListener('error', onerror);
+            probeWs.addEventListener('close', onclose);
+        }).catch(err=>{
+            try{ reportErrorForCopilot(err, { piesocketHost, apiKeyPresent: !!apiKey }); }catch(e){}
+            try{ if(probeWs){ try{ probeWs.close(); }catch(e){} probeWs=null; } }catch(e){}
+            show404AndLock('Failed to connect to signaling server (WSS).');
+            throw err;
+        });
+
+        // Success: enable UI and request notifications
+        APP_READY_FOR_UI = true;
+        try{ initDialPad(); }catch(e){}
+        try{ requestNotificationPermission(); }catch(e){}
+        try{ if(probeWs){ /* keep or close probe socket; close to avoid duplicate */ probeWs.close(); probeWs=null; } }catch(e){}
+    }catch(e){ return; }
+
     const phone = localStorage.getItem('myPhoneNumber');
     setState(phone ? 'dialing' : 'setup');
 }
